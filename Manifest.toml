@@ -107,6 +107,12 @@ git-tree-sha1 = "19aad7f60097b24dae5d080482429ab7f8c8c893"
 uuid = "7c1d4256-1411-5781-91ec-d7bc3513ac07"
 version = "0.3.12"
 
+[[FileIO]]
+deps = ["Pkg"]
+git-tree-sha1 = "f354b2087a3b01c1d7152c19f45886c8a036fa5e"
+uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
+version = "1.4.0"
+
 [[ForwardDiff]]
 deps = ["CommonSubexpressions", "DiffResults", "DiffRules", "NaNMath", "Random", "SpecialFunctions", "StaticArrays"]
 git-tree-sha1 = "1d090099fb82223abc48f7ce176d3f7696ede36d"
@@ -132,6 +138,12 @@ uuid = "83e8ac13-25f8-5344-8a64-a9f2b223428f"
 [[InteractiveUtils]]
 deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
+
+[[JLD2]]
+deps = ["CodecZlib", "DataStructures", "FileIO", "Mmap", "Pkg", "Printf", "UUIDs"]
+git-tree-sha1 = "9353b717ee4e27beab4e902c92a06bb5f160d2cf"
+uuid = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+version = "0.1.14"
 
 [[JSON]]
 deps = ["Dates", "Mmap", "Parsers", "Unicode"]
@@ -189,6 +201,12 @@ version = "0.9.14"
 [[MbedTLS]]
 deps = ["BinaryProvider", "Dates", "Libdl", "Pkg", "Random", "Sockets"]
 uuid = "739be429-bea8-5141-9913-cc70e7f3736d"
+
+[[MetaGraphs]]
+deps = ["JLD2", "LightGraphs", "Random"]
+git-tree-sha1 = "8900d368fa44bd61c7e598d6a0f577e347f3cf67"
+uuid = "626554b9-1ddb-594c-aa3c-2596fe9399a5"
+version = "0.6.5"
 
 [[Mmap]]
 uuid = "a63ad114-7e13-5084-954f-fe012c677804"
