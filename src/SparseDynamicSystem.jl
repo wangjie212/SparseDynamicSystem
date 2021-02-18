@@ -8,11 +8,13 @@ using LinearAlgebra
 using DynamicPolynomials
 using MultivariatePolynomials
 using COSMO
+using MetaGraphs
 
-export MPI_first
+export MPI,UPO,BEE
 
 include("chordal_extension.jl")
 include("clique_merge.jl")
+include("getblock.jl")
 include("DynamicSystem.jl")
 
 end
