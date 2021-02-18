@@ -18,5 +18,5 @@ using DynamicPolynomials
 f = [2*x[2], -0.8*x[1] - 10*(x[1]^2-0.21)*x[2]]
 g = [1.1^2-x[1]^2, 1.1^2-x[2]^2]
 d = 8 # the relaxation order
-opt,w = MPI_first(f, g, x, d, -1.1*ones(2), 1.1*ones(2), β=1, TS="block")
+opt,w = MPI(f, g, x, d, -1.1*ones(2), 1.1*ones(2), β=1)
 ```
