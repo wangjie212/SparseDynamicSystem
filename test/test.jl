@@ -1,5 +1,5 @@
-# include("E:\\Programs\\SparseDynamicSystem\\SparseDynamicSystem\\src\\SparseDynamicSystem.jl")
-using SparseDynamicSystem
+include("E:\\Programs\\SparseDynamicSystem\\SparseDynamicSystem\\src\\SparseDynamicSystem.jl")
+using .SparseDynamicSystem
 using DynamicPolynomials
 
 # The Lorentz system
@@ -7,7 +7,7 @@ using DynamicPolynomials
 f = [10*x[1]-12*x[2], -70/3*x[1]+x[2]+125/3*x[1]*x[3], 8/3*x[3]-15*x[1]*x[2]]
 g = [1-x[1]^2, 1-x[2]^2, 1-x[3]^2]
 @time begin
-opt,w = MPI(f, g, x, 3, -ones(3), ones(3), SO=[2;1], β=1)
+opt,w = MPI(f, g, x, 3, -ones(3), ones(3), QUIET=true, TS=["block","block"], SO=[2;1], β=1)
 end
 
 # the Van-der-Pol oscillator
@@ -21,7 +21,7 @@ end
 @polyvar x[1:6]
 f = [2*x[2], -0.8*x[1] - 10*(x[1]^2-0.21)*x[2] + 0.1*x[5], 2*x[4], -0.8*x[3] - 10*(x[3]^2-0.21)*x[4] + 0.1*x[1], 2*x[6], -0.8*x[5] - 10*(x[5]^2-0.21)*x[6] + 0.1*x[3]]
 g = [1.1^2-x[1]^2, 1.1^2-x[2]^2, 1.1^2-x[3]^2, 1.1^2-x[4]^2, 1.1^2-x[5]^2, 1.1^2-x[6]^2]
-opt,w = MPI(f, g, x, 3, -1.1*ones(6), 1.1*ones(6), TS=["block", "MD"])
+opt,w = MPI(f, g, x, 4, -1.1*ones(6), 1.1*ones(6), TS=["block", "MD"])
 
 # 9 mode fluid model
 α = 1/2
@@ -48,9 +48,9 @@ f[7] = -κ3^2/R*a[7] - α/sqrt(6)*(a[1]*a[6] + a[6]*a[9]) - (α^2 - 1)/(sqrt(6)*
 f[8] = -κ3^2/R*a[8] + 2*α*β/(sqrt(6)*κ1*κ3)*a[2]*a[5] + (3*α^2 - β^2 + 3)/(sqrt(6)*κ1*κ2*κ3)*a[3]*a[4]
 f[9] = -9*β^2/R*a[9] + sqrt(3/2)*β/κ2*a[2]*a[3] - sqrt(3/2)*β/κ3*a[6]*a[8]
 g = [1 - sum(a.^2)]
-# h = -(β^2*a[1]^2 + (4*β^2/3 + 1)*a[2]^2 + κ2^2*a[3]^2 + (3*α^2 + 4*β^2)/3*a[4]^2 + (α^2+β^2)*a[5]^2 +
-# (3*α^2 + 4*β^2 + 3)/3*a[6]^2 + κ3^2*a[7]^2 + κ3^2*a[8]^2 + 9*β^2*a[9]^2)
-h = (1-a[1])^2 + sum(a[2:9].^2)
+h = -(β^2*a[1]^2 + (4*β^2/3 + 1)*a[2]^2 + κ2^2*a[3]^2 + (3*α^2 + 4*β^2)/3*a[4]^2 + (α^2+β^2)*a[5]^2 +
+(3*α^2 + 4*β^2 + 3)/3*a[6]^2 + κ3^2*a[7]^2 + κ3^2*a[8]^2 + 9*β^2*a[9]^2)
+# h = (1-a[1])^2 + sum(a[2:9].^2)
 
 @time begin
 opt = UPO(f, h, g, a, 3, TS="block")
@@ -65,14 +65,18 @@ f[3] = (1 - x[5])*x[1]
 f[4] = (1 - x[6])*x[2]
 f[5] = x[1]*x[3]
 f[6] = x[2]*x[4]
-g = [1 - sum(x.^2)]
+p = [1-x[1]^2, 1-x[2]^2, 1-x[3]^2, 1-x[4]^2, 1-x[5]^2, 1-x[6]^2]
+q = [0.01-sum(x.^2)]
 
 @time begin
-opt,w = MPI(f, g, x, 2, -ones(6), ones(6), β=1, TS=["block", "MD"])
+opt,w = MPI(f, p, x, 2, -ones(6), ones(6), β=1, TS=["block", "MD"])
+end
+
+@time begin
+opt,v0 = ROA(f, p, q, x, 8, 3, -ones(6), ones(6), TS=["MD","MD"])
 end
 
 # 16 mode fluid model
-Φ = 10^3
 @polyvar a[1:16]
 f = Vector{Polynomial}(undef, 16)
 f[1] = -(2*π)^2*a[1] + sqrt(2)*π*sum(a[j]*a[j+1] for j=1:15)
@@ -81,10 +85,17 @@ for i = 2:15
 end
 f[16] = -(2*π*16)^2*a[16] - sqrt(2)*π*8*sum(a[j]*a[16-j] for j=1:15)
 h = 2*π^2*sum(i^2*a[i]^2 for i=1:16)
-g = [h - Φ]
-o = [Φ/(2*π^2) - sum(a.^2)]
 
-@time begin
-opt = BEE(f, h, o, g, a, 2, TS=["block","MD"], merge=true, md=4)
-println(opt/Φ^(3/2))
+t = zeros(9)
+val = zeros(9)
+Φ0 = 10^5
+for i = 1:9
+Φ = (i+1)*Φ0
+g = [h/Φ^(3/4) - Φ^(1/4)]
+o = [Φ^(1/4)/(2*π^2) - sum(a.^2)/Φ^(3/4)]
+
+t[i] = @elapsed begin
+opt = BEE(f, h, o, g, a, 2, TS=["block","block"], SO=[2,1], QUIET=false, merge=true, md=4)
+end
+val[i] = opt/Φ^(3/2)
 end
