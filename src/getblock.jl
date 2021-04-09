@@ -82,7 +82,7 @@ end
 
 function get_Lsupp(n, vsupp, fsupp, flt)
     Lsupp = zeros(UInt8, n, 1)
-    for i = 1:n
+    for i = 1:length(flt)
         temp = zeros(UInt8, n)
         temp[i] = 1
         for j = 1:size(vsupp, 2)
@@ -164,7 +164,7 @@ function get_cgraph(tsupp::Array{UInt8, 2}, gsupp::Array{UInt8, 2}, glt, basis::
     return G
 end
 
-function get_vblocks(n::Int, m::Int, dv, tsupp::Array{UInt8, 2}, vsupp::Array{UInt8, 2}, fsupp, flt, gsupp::Vector{Array{UInt8, 2}}, glt, basis::Vector{Array{UInt8, 2}}; TS="block", SO=1, merge=false, md=3, QUIET=false)
+function get_vblocks(n::Int, m::Int, dv, tsupp, vsupp::Array{UInt8, 2}, fsupp, flt, gsupp::Vector{Array{UInt8, 2}}, glt, basis::Vector{Array{UInt8, 2}}; TS="block", SO=1, merge=false, md=3, QUIET=false)
     blocks = Vector{Vector{Vector{UInt16}}}(undef, m+1)
     if TS == false
         for k = 1:m+1
@@ -227,7 +227,7 @@ function get_vblocks(n::Int, m::Int, dv, tsupp::Array{UInt8, 2}, vsupp::Array{UI
     return blocks,vsupp,status
 end
 
-function get_blocks(n::Int, m::Int, tsupp::Array{UInt8, 2}, gsupp::Vector{Array{UInt8, 2}}, glt, basis::Vector{Array{UInt8, 2}}; TS="block", SO=1, merge=false, md=3, QUIET=false)
+function get_blocks(n::Int, m::Int, tsupp, gsupp::Vector{Array{UInt8, 2}}, glt, basis::Vector{Array{UInt8, 2}}; TS="block", SO=1, merge=false, md=3, QUIET=false)
     blocks = Vector{Vector{Vector{UInt16}}}(undef, m+1)
     if TS == false
         for k = 1:m+1

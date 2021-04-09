@@ -10,7 +10,7 @@ using MultivariatePolynomials
 using COSMO
 using MetaGraphs
 
-export MPI,UPO,BEE
+export MPI,UPO,BEE,ROA
 
 include("chordal_extension.jl")
 include("clique_merge.jl")
