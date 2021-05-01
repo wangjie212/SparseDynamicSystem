@@ -311,7 +311,6 @@ function ROA(f, p, q, x, T, d, lb, ub; TS=["block","block"], merge=false, md=3, 
     psupp0 = Vector{Array{UInt8,2}}(undef, m1+1)
     for i = 1:m1
         basis1[i+1] = get_basis(n, d-Int(ceil(dp[i]/2)))
-        tsupp = [tsupp psupp[i]]
         psupp0[i] = [psupp[i]; zeros(UInt8, 1, size(psupp[i],2))]
     end
     psupp0[m1+1] = zeros(UInt8, n+1, 2)
@@ -324,7 +323,6 @@ function ROA(f, p, q, x, T, d, lb, ub; TS=["block","block"], merge=false, md=3, 
     basis2[1] = basis1[1]
     for i = 1:m2
         basis2[i+1] = get_basis(n, d-Int(ceil(dq[i]/2)))
-        tsupp = [tsupp qsupp[i]]
     end
     basis0 = Vector{Array{UInt8,2}}(undef, m1+2)
     basis0[1] = get_basis(n+1, d)
@@ -347,14 +345,17 @@ function ROA(f, p, q, x, T, d, lb, ub; TS=["block","block"], merge=false, md=3, 
         sign_type = unique(sign_type, dims=2)
         ind = [bfind(sign_type, size(sign_type, 2), UInt8.(isodd.(vsupp[:,i])))!=0 for i=1:size(vsupp,2)]
         vsupp = vsupp[:, ind]
+        for i = 1:n
+            fsupp[i] = [fsupp[i]; zeros(UInt8, 1, size(fsupp[i],2))]
+        end
         tsupp0 = [vsupp get_Lsupp(n+1, vsupp, fsupp, flt)]
         tsupp0 = sortslices(tsupp0, dims=2)
         tsupp0 = unique(tsupp0, dims=2)
     else
+        for i = 1:n
+            fsupp[i] = [fsupp[i]; zeros(UInt8, 1, size(fsupp[i],2))]
+        end
         tsupp0 = nothing
-    end
-    for i = 1:n
-        fsupp[i] = [fsupp[i]; zeros(UInt8, 1, size(fsupp[i],2))]
     end
     blocks0,vsupp,status = get_vblocks(n+1, m1+1, 2d+1-maximum(df), tsupp0, vsupp, fsupp, flt, psupp0, plt0, basis0, TS=TS[1], SO=SO[1], merge=merge, md=md, QUIET=QUIET)
     if status == 1
