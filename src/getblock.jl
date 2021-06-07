@@ -148,7 +148,7 @@ function get_cgraph(tsupp::Array{UInt8, 2}, gsupp::Array{UInt8, 2}, glt, basis::
     G = SimpleGraph(lb)
     ltsupp = size(tsupp, 2)
     for i = 1:lb, j = i+1:lb
-        r=1
+        r = 1
         while r <= glt
             bi = basis[:,i] + basis[:,j] + gsupp[:,r]
             if bfind(tsupp, ltsupp, bi) != 0
@@ -164,7 +164,7 @@ function get_cgraph(tsupp::Array{UInt8, 2}, gsupp::Array{UInt8, 2}, glt, basis::
     return G
 end
 
-function get_vblocks(n::Int, m::Int, dv, tsupp, vsupp::Array{UInt8, 2}, fsupp, flt, gsupp::Vector{Array{UInt8, 2}}, glt, basis::Vector{Array{UInt8, 2}}; TS="block", SO=1, merge=false, md=3, QUIET=false)
+function get_vblocks(n::Int, m::Int, dv, tsupp1, tsupp, vsupp::Array{UInt8, 2}, fsupp, flt, gsupp::Vector{Array{UInt8, 2}}, glt, basis::Vector{Array{UInt8, 2}}; TS="block", SO=1, merge=false, md=3, QUIET=false)
     blocks = Vector{Vector{Vector{UInt16}}}(undef, m+1)
     if TS == false
         for k = 1:m+1
@@ -176,7 +176,7 @@ function get_vblocks(n::Int, m::Int, dv, tsupp, vsupp::Array{UInt8, 2}, fsupp, f
         blocks[1] = Vector{UInt16}[]
         qvsupp = vsupp
         for i = 1:SO
-            G = get_graph(tsupp, basis[1])
+            G = get_graph(tsupp1, basis[1])
             if TS == "block"
                 nblock = connected_components(G)
             else
@@ -199,9 +199,9 @@ function get_vblocks(n::Int, m::Int, dv, tsupp, vsupp::Array{UInt8, 2}, fsupp, f
                     tsupp = sortslices(tsupp, dims=2)
                     tsupp = unique(tsupp, dims=2)
                     qvsupp = tsupp[:, [sum(tsupp[:,i])<=dv for i=1:size(tsupp,2)]]
-                    tsupp = [tsupp get_Lsupp(n, qvsupp, fsupp, flt)]
-                    tsupp = sortslices(tsupp, dims=2)
-                    tsupp = unique(tsupp, dims=2)
+                    tsupp1 = [tsupp get_Lsupp(n, qvsupp, fsupp, flt)]
+                    tsupp1 = sortslices(tsupp1, dims=2)
+                    tsupp1 = unique(tsupp1, dims=2)
                 end
             else
                 println("No higher TSSOS hierarchy!")
@@ -219,12 +219,12 @@ function get_vblocks(n::Int, m::Int, dv, tsupp, vsupp::Array{UInt8, 2}, fsupp, f
                 println("------------------------------------------------------")
             end
             for k = 1:m
-                G = get_cgraph(tsupp, gsupp[k], glt[k], basis[k+1])
+                G = get_cgraph(tsupp1, gsupp[k], glt[k], basis[k+1])
                 blocks[k+1] = connected_components(G)
             end
         end
     end
-    return blocks,vsupp,status
+    return blocks,vsupp,tsupp,status
 end
 
 function get_blocks(n::Int, m::Int, tsupp, gsupp::Vector{Array{UInt8, 2}}, glt, basis::Vector{Array{UInt8, 2}}; TS="block", SO=1, merge=false, md=3, QUIET=false)

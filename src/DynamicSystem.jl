@@ -1,4 +1,4 @@
-function MPI(f, g, x, d, lb, ub; TS=["block","block"], merge=false, md=3, SO=[1;1], β=1, QUIET=false, solver="Mosek")
+function MPI(f, g, x, d, lb, ub; TS=["block","block"], merge=false, md=3, SO=[1;1], β=1, QUIET=false)
     n = length(x)
     m = length(g)
     fsupp,fcoe,flt,df = polys_info(f, x)
@@ -8,38 +8,37 @@ function MPI(f, g, x, d, lb, ub; TS=["block","block"], merge=false, md=3, SO=[1;
     for i = 1:m
         basis[i+1] = get_basis(n, d-Int(ceil(dg[i]/2)))
     end
-    vsupp = get_basis(n, 2d+1-maximum(df))
+    dv = 2d+1-maximum(df)
     if TS[1] != false
         tsupp = zeros(UInt8, n, 1)
         for i = 1:m
             tsupp = [tsupp gsupp[i]]
         end
         tsupp = [tsupp get_Lsupp(n, tsupp, fsupp, flt)]
-        sign_type = UInt8.(isodd.(tsupp))
-        sign_type = sortslices(sign_type, dims=2)
-        sign_type = unique(sign_type, dims=2)
-        ind = [bfind(sign_type, size(sign_type, 2), UInt8.(isodd.(vsupp[:,i])))!=0 for i=1:size(vsupp,2)]
-        vsupp = vsupp[:, ind]
+        tsupp = sortslices(tsupp, dims=2)
+        tsupp = unique(tsupp, dims=2)
+        vsupp = tsupp[:, [sum(tsupp[:,i])<=dv for i=1:size(tsupp,2)]]
         tsupp1 = [vsupp get_Lsupp(n, vsupp, fsupp, flt)]
         tsupp1 = sortslices(tsupp1, dims=2)
         tsupp1 = unique(tsupp1, dims=2)
     else
+        vsupp = get_basis(n, dv)
         tsupp1 = nothing
     end
-    blocks1,vsupp,status = get_vblocks(n, m, 2d+1-maximum(df), tsupp1, vsupp, fsupp, flt, gsupp, glt, basis, TS=TS[1], SO=SO[1], merge=merge, md=md, QUIET=QUIET)
+    blocks1,vsupp,tsupp,status = get_vblocks(n, m, dv, tsupp1, tsupp, vsupp, fsupp, flt, gsupp, glt, basis, TS=TS[1], SO=SO[1], merge=merge, md=md, QUIET=QUIET)
     if status == 1
         tsupp1 = get_tsupp(n, m, gsupp, glt, basis, blocks1)
         if TS[1] != false
-            tsupp2 = sortslices(vsupp, dims=2)
-            tsupp2 = unique(tsupp2, dims=2)
+            tsupp = sortslices(tsupp, dims=2)
+            tsupp = unique(tsupp, dims=2)
         else
-            tsupp2 = nothing
+            tsupp = nothing
         end
-        blocks2,status = get_blocks(n, m, tsupp2, gsupp, glt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
+        blocks2,status = get_blocks(n, m, tsupp, gsupp, glt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
         if status == 1
             tsupp2 = get_tsupp(n, m, gsupp, glt, basis, blocks2)
             moment = get_moment(n, tsupp2, lb, ub)
-            opt,wcoe = MPI_SDP(n, m, fsupp, fcoe, flt, gsupp, gcoe, glt, basis, tsupp1, tsupp2, vsupp, blocks1, blocks2, moment, β=β, QUIET=QUIET, solver=solver)
+            opt,wcoe = MPI_SDP(n, m, fsupp, fcoe, flt, gsupp, gcoe, glt, basis, tsupp1, tsupp2, vsupp, blocks1, blocks2, moment, β=β, QUIET=QUIET)
             ind = [abs(wcoe[i])>1e-6 for i=1:size(tsupp2, 2)]
             wsupp = [prod(x.^tsupp2[:,i]) for i=1:size(tsupp2, 2)]
             w = wcoe[ind]'*wsupp[ind]
@@ -49,12 +48,8 @@ function MPI(f, g, x, d, lb, ub; TS=["block","block"], merge=false, md=3, SO=[1;
     return nothing,nothing
 end
 
-function MPI_SDP(n, m, fsupp, fcoe, flt, gsupp, gcoe, glt, basis, tsupp1, tsupp2, vsupp, blocks1, blocks2, moment; β=1, QUIET=false, solver="Mosek")
-    if solver == "COSMO"
-        model = Model(optimizer_with_attributes(COSMO.Optimizer))
-    else
-        model = Model(optimizer_with_attributes(Mosek.Optimizer))
-    end
+function MPI_SDP(n, m, fsupp, fcoe, flt, gsupp, gcoe, glt, basis, tsupp1, tsupp2, vsupp, blocks1, blocks2, moment; β=1, QUIET=false)
+    model = Model(optimizer_with_attributes(Mosek.Optimizer))
     set_optimizer_attribute(model, MOI.Silent(), QUIET)
     ltsupp1 = size(tsupp1, 2)
     ltsupp2 = size(tsupp2, 2)
@@ -109,7 +104,7 @@ function dvf(n, tsupp, vsupp, vcoe, fsupp, fcoe, flt; β=1)
     return vfcoe
 end
 
-function UPO(f, h, g, x, d; TS="block", SO=1, merge=false, md=3, QUIET=false, solver="Mosek")
+function UPO(f, h, g, x, d; TS="block", SO=1, merge=false, md=3, QUIET=false)
     n = length(x)
     m = length(g)
     fsupp,fcoe,flt,df = polys_info(f, x)
@@ -120,38 +115,33 @@ function UPO(f, h, g, x, d; TS="block", SO=1, merge=false, md=3, QUIET=false, so
     for i = 1:m
         basis[i+1] = get_basis(n, d-Int(ceil(dg[i]/2)))
     end
-    vsupp = get_basis(n, 2d+1-maximum(df))
+    dv = 2d+1-maximum(df)
     if TS != false
         tsupp = hsupp
         for i = 1:m
             tsupp = [tsupp gsupp[i]]
         end
         tsupp = [tsupp get_Lsupp(n, tsupp, fsupp, flt)]
-        sign_type = UInt8.(isodd.(tsupp))
-        sign_type = sortslices(sign_type, dims=2)
-        sign_type = unique(sign_type, dims=2)
-        ind = [bfind(sign_type, size(sign_type, 2), UInt8.(isodd.(vsupp[:,i])))!=0 for i=1:size(vsupp,2)]
-        vsupp = vsupp[:, ind]
-        tsupp = get_Lsupp(n, vsupp, fsupp, flt)
+        tsupp = sortslices(tsupp, dims=2)
+        tsupp = unique(tsupp, dims=2)
+        vsupp = tsupp[:, [sum(tsupp[:,i])<=dv for i=1:size(tsupp,2)]]
+        tsupp1 = get_Lsupp(n, vsupp, fsupp, flt)
     else
-        tsupp = nothing
+        vsupp = get_basis(n, dv)
+        tsupp1 = nothing
     end
-    blocks,vsupp,status = get_vblocks(n, m, 2d+1-maximum(df), tsupp, vsupp, fsupp, flt, gsupp, glt, basis, TS=TS, SO=SO, merge=merge, md=md, QUIET=QUIET)
+    blocks,vsupp,tsupp,status = get_vblocks(n, m, dv, tsupp1, tsupp, vsupp, fsupp, flt, gsupp, glt, basis, TS=TS, SO=SO, merge=merge, md=md, QUIET=QUIET)
     if status == 1
-        tsupp = get_tsupp(n, m, gsupp, glt, basis, blocks)
-        opt = UPO_SDP(n, m, fsupp, fcoe, flt, hsupp, hcoe, gsupp, gcoe, glt, basis, tsupp, vsupp, blocks, QUIET=QUIET, solver=solver)
+        tsupp1 = get_tsupp(n, m, gsupp, glt, basis, blocks)
+        opt = UPO_SDP(n, m, fsupp, fcoe, flt, hsupp, hcoe, gsupp, gcoe, glt, basis, tsupp1, vsupp, blocks, QUIET=QUIET)
         return opt
     else
         return nothing
     end
 end
 
-function UPO_SDP(n, m, fsupp, fcoe, flt, hsupp, hcoe, gsupp, gcoe, glt, basis, tsupp, vsupp, blocks; QUIET=false, solver="Mosek")
-    if solver == "COSMO"
-        model = Model(optimizer_with_attributes(COSMO.Optimizer))
-    else
-        model = Model(optimizer_with_attributes(Mosek.Optimizer))
-    end
+function UPO_SDP(n, m, fsupp, fcoe, flt, hsupp, hcoe, gsupp, gcoe, glt, basis, tsupp, vsupp, blocks; QUIET=false)
+    model = Model(optimizer_with_attributes(Mosek.Optimizer))
     set_optimizer_attribute(model, MOI.Silent(), QUIET)
     coeff1 = add_putinar!(model, m, tsupp, gsupp, gcoe, glt, basis, blocks)
     ltsupp = size(tsupp, 2)
@@ -190,7 +180,7 @@ function UPO_SDP(n, m, fsupp, fcoe, flt, hsupp, hcoe, gsupp, gcoe, glt, basis, t
     return objv
 end
 
-function BEE(f, h, o, g, x, d; TS=["block","block"], SO=[1;1], merge=false, md=3, QUIET=false, solver="Mosek")
+function BEE(f, h, o, g, x, d; TS=["block","block"], SO=[1;1], merge=false, md=3, QUIET=false)
     n = length(x)
     fsupp,fcoe,flt,df = polys_info(f, x)
     hsupp,hcoe = poly_info(h, x)
@@ -203,7 +193,7 @@ function BEE(f, h, o, g, x, d; TS=["block","block"], SO=[1;1], merge=false, md=3
     for i = 1:m1
         basis[i+1] = get_basis(n, d-Int(ceil(dg[i]/2)))
     end
-    vsupp = get_basis(n, 2d+1-maximum(df))
+    dv = 2d+1-maximum(df)
     if TS[1] != false
         tsupp = hsupp
         for i = 1:m1
@@ -213,29 +203,28 @@ function BEE(f, h, o, g, x, d; TS=["block","block"], SO=[1;1], merge=false, md=3
             tsupp = [tsupp gsupp[i]]
         end
         tsupp = [tsupp get_Lsupp(n, tsupp, fsupp, flt)]
-        sign_type = UInt8.(isodd.(tsupp))
-        sign_type = sortslices(sign_type, dims=2)
-        sign_type = unique(sign_type, dims=2)
-        ind = [bfind(sign_type, size(sign_type,2), UInt8.(isodd.(vsupp[:,i])))!=0 for i=1:size(vsupp,2)]
-        vsupp = vsupp[:, ind]
+        tsupp = sortslices(tsupp, dims=2)
+        tsupp = unique(tsupp, dims=2)
+        vsupp = tsupp[:, [sum(tsupp[:,i])<=dv for i=1:size(tsupp,2)]]
         tsupp1 = get_Lsupp(n, vsupp, fsupp, flt)
     else
+        vsupp = get_basis(n, dv)
         tsupp1 = nothing
     end
-    blocks1,vsupp,status = get_vblocks(n, m1, 2d+1-maximum(df), tsupp1, vsupp, fsupp, flt, osupp, olt, basis, TS=TS[1], SO=SO[1], merge=merge, QUIET=QUIET)
+    blocks1,vsupp,tsupp,status = get_vblocks(n, m1, dv, tsupp1, tsupp, vsupp, fsupp, flt, osupp, olt, basis, TS=TS[1], SO=SO[1], merge=merge, QUIET=QUIET)
     if status == 1
         tsupp1 = get_tsupp(n, m1, osupp, olt, basis, blocks1)
         if TS[1] != false
-            tsupp2 = sortslices(vsupp, dims=2)
-            tsupp2 = unique(tsupp2, dims=2)
+            tsupp = sortslices(tsupp, dims=2)
+            tsupp = unique(tsupp, dims=2)
         else
-            tsupp2 = nothing
+            tsupp = nothing
         end
-        blocks2,status = get_blocks(n, m1, tsupp2, osupp, olt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
+        blocks2,status = get_blocks(n, m1, tsupp, osupp, olt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
         if status == 1
             tsupp2 = get_tsupp(n, m1, osupp, olt, basis, blocks2)
             opt = BEE_SDP(n, m1, m2, fsupp, fcoe, flt, hsupp, hcoe, osupp, ocoe, olt, gsupp, gcoe, glt, basis, tsupp1,
-            tsupp2, vsupp, blocks1, blocks2, QUIET=QUIET, solver=solver)
+            tsupp2, vsupp, blocks1, blocks2, QUIET=QUIET)
             return opt
         end
     end
@@ -243,12 +232,8 @@ function BEE(f, h, o, g, x, d; TS=["block","block"], SO=[1;1], merge=false, md=3
 end
 
 function BEE_SDP(n, m1, m2, fsupp, fcoe, flt, hsupp, hcoe, osupp, ocoe, olt, gsupp, gcoe, glt, basis, tsupp1, tsupp2,
-    vsupp, blocks1, blocks2; QUIET=false, solver="Mosek")
-    if solver == "COSMO"
-        model = Model(optimizer_with_attributes(COSMO.Optimizer))
-    else
-        model = Model(optimizer_with_attributes(Mosek.Optimizer))
-    end
+    vsupp, blocks1, blocks2; QUIET=false)
+    model = Model(optimizer_with_attributes(Mosek.Optimizer))
     set_optimizer_attribute(model, MOI.Silent(), QUIET)
     coeff1 = add_putinar!(model, m1, tsupp1, osupp, ocoe, olt, basis, blocks1)
     coeff2 = add_putinar!(model, m1, tsupp2, osupp, ocoe, olt, basis, blocks2)
@@ -299,7 +284,7 @@ function BEE_SDP(n, m1, m2, fsupp, fcoe, flt, hsupp, hcoe, osupp, ocoe, olt, gsu
     return objv
 end
 
-function ROA(f, p, q, x, T, d, lb, ub; TS=["block","block"], merge=false, md=3, SO=[1;1], β=1, QUIET=false, solver="Mosek")
+function ROA(f, p, q, x, T, d, lb, ub; TS=["block","block"], merge=false, md=3, SO=[1;1], β=1, QUIET=false)
     n = length(x)
     m1 = length(p)
     m2 = length(q)
@@ -329,7 +314,7 @@ function ROA(f, p, q, x, T, d, lb, ub; TS=["block","block"], merge=false, md=3, 
     for i = 1:m1+1
         basis0[i+1] = get_basis(n+1, d-Int(ceil(dp0[i]/2)))
     end
-    vsupp = get_basis(n+1, 2d+1-maximum(df))
+    dv = 2d+1-maximum(df)
     if TS[1] != false
         tsupp = zeros(UInt8, n, 1)
         for i = 1:m1
@@ -339,12 +324,10 @@ function ROA(f, p, q, x, T, d, lb, ub; TS=["block","block"], merge=false, md=3, 
             tsupp = [tsupp qsupp[i]]
         end
         tsupp = [tsupp get_Lsupp(n, tsupp, fsupp, flt)]
-        sign_type = UInt8.(isodd.(tsupp))
-        sign_type = [[sign_type; zeros(UInt8, 1, size(sign_type,2))] [sign_type; ones(UInt8, 1, size(sign_type,2))]]
-        sign_type = sortslices(sign_type, dims=2)
-        sign_type = unique(sign_type, dims=2)
-        ind = [bfind(sign_type, size(sign_type, 2), UInt8.(isodd.(vsupp[:,i])))!=0 for i=1:size(vsupp,2)]
-        vsupp = vsupp[:, ind]
+        tsupp = [[tsupp; zeros(UInt8, 1, size(tsupp,2))] [tsupp; ones(UInt8, 1, size(tsupp,2))]]
+        tsupp = sortslices(tsupp, dims=2)
+        tsupp = unique(tsupp, dims=2)
+        vsupp = tsupp[:, [sum(tsupp[:,i])<=dv for i=1:size(tsupp,2)]]
         for i = 1:n
             fsupp[i] = [fsupp[i]; zeros(UInt8, 1, size(fsupp[i],2))]
         end
@@ -352,27 +335,28 @@ function ROA(f, p, q, x, T, d, lb, ub; TS=["block","block"], merge=false, md=3, 
         tsupp0 = sortslices(tsupp0, dims=2)
         tsupp0 = unique(tsupp0, dims=2)
     else
+        vsupp = get_basis(n+1, dv)
         for i = 1:n
             fsupp[i] = [fsupp[i]; zeros(UInt8, 1, size(fsupp[i],2))]
         end
         tsupp0 = nothing
     end
-    blocks0,vsupp,status = get_vblocks(n+1, m1+1, 2d+1-maximum(df), tsupp0, vsupp, fsupp, flt, psupp0, plt0, basis0, TS=TS[1], SO=SO[1], merge=merge, md=md, QUIET=QUIET)
+    blocks0,vsupp,tsupp,status = get_vblocks(n+1, m1+1, dv, tsupp0, tsupp, vsupp, fsupp, flt, psupp0, plt0, basis0, TS=TS[1], SO=SO[1], merge=merge, md=md, QUIET=QUIET)
     if status == 1
         tsupp0 = get_tsupp(n+1, m1+1, psupp0, plt0, basis0, blocks0)
         if TS[1] != false
-            tsupp1 = sortslices(vsupp[1:n,:], dims=2)
-            tsupp1 = unique(tsupp1, dims=2)
+            tsupp = sortslices(tsupp[1:n,:], dims=2)
+            tsupp = unique(tsupp, dims=2)
         else
-            tsupp1 = nothing
+            tsupp = nothing
         end
-        blocks1,status = get_blocks(n, m1, tsupp1, psupp, plt, basis1, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
-        blocks2,status = get_blocks(n, m2, tsupp1, qsupp, qlt, basis2, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
+        blocks1,status = get_blocks(n, m1, tsupp, psupp, plt, basis1, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
+        blocks2,status = get_blocks(n, m2, tsupp, qsupp, qlt, basis2, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
         if status == 1
             tsupp1 = get_tsupp(n, m1, psupp, plt, basis1, blocks1)
             tsupp2 = get_tsupp(n, m2, qsupp, qlt, basis2, blocks2)
             moment = get_moment(n, tsupp1, lb, ub)
-            opt,vcoe = ROA_SDP(n, m1, m2, T, fsupp, fcoe, flt, psupp0, pcoe0, plt0, psupp, pcoe, plt, qsupp, qcoe, qlt, basis0, basis1, basis2, tsupp0, tsupp1, tsupp2, vsupp, blocks0, blocks1, blocks2, moment, β=β, QUIET=QUIET, solver=solver)
+            opt,vcoe = ROA_SDP(n, m1, m2, T, fsupp, fcoe, flt, psupp0, pcoe0, plt0, psupp, pcoe, plt, qsupp, qcoe, qlt, basis0, basis1, basis2, tsupp0, tsupp1, tsupp2, vsupp, blocks0, blocks1, blocks2, moment, β=β, QUIET=QUIET)
             ind = [vsupp[n+1,i] == 0&&abs(vcoe[i])>1e-6 for i=1:size(vsupp, 2)]
             vsuppx = [prod(x.^vsupp[1:n,i]) for i=1:size(vsupp, 2)]
             v0 = vcoe[ind]'*vsuppx[ind]
@@ -382,12 +366,8 @@ function ROA(f, p, q, x, T, d, lb, ub; TS=["block","block"], merge=false, md=3, 
     return nothing,nothing
 end
 
-function ROA_SDP(n, m1, m2, T, fsupp, fcoe, flt, psupp0, pcoe0, plt0, psupp, pcoe, plt, qsupp, qcoe, qlt, basis0, basis1, basis2, tsupp0, tsupp1, tsupp2, vsupp, blocks0, blocks1, blocks2, moment; β=1, QUIET=false, solver="Mosek")
-    if solver == "COSMO"
-        model = Model(optimizer_with_attributes(COSMO.Optimizer))
-    else
-        model = Model(optimizer_with_attributes(Mosek.Optimizer))
-    end
+function ROA_SDP(n, m1, m2, T, fsupp, fcoe, flt, psupp0, pcoe0, plt0, psupp, pcoe, plt, qsupp, qcoe, qlt, basis0, basis1, basis2, tsupp0, tsupp1, tsupp2, vsupp, blocks0, blocks1, blocks2, moment; β=1, QUIET=false)
+    model = Model(optimizer_with_attributes(Mosek.Optimizer))
     set_optimizer_attribute(model, MOI.Silent(), QUIET)
     ltsupp0 = size(tsupp0, 2)
     ltsupp1 = size(tsupp1, 2)
@@ -447,79 +427,84 @@ function ROA_SDP(n, m1, m2, T, fsupp, fcoe, flt, psupp0, pcoe0, plt0, psupp, pco
     return objv,value.(vcoe)
 end
 
-# function GA(f, g, x, d, lb, ub; TS=["block","block"], merge=false, md=3, SO=[1;1], β=1, QUIET=false, solver="Mosek")
-#     n = length(x)
-#     m = length(g)
-#     fsupp,fcoe,flt,df = polys_info(f, x)
-#     gsupp,gcoe,glt,dg = polys_info(g, x)
-#     tsupp=zeros(UInt8, n, 1)
-#     basis = Vector{Array{UInt8,2}}(undef, m+1)
-#     basis[1] = get_basis(n, d)
-#     for i = 1:m
-#         basis[i+1] = get_basis(n, d-Int(ceil(dg[i]/2)))
-#         tsupp = [tsupp gsupp[i]]
-#     end
-#     tsupp = [tsupp get_Lsupp(n, tsupp, fsupp, flt)]
-#     sign_type = UInt8.(isodd.(tsupp))
-#     sign_type = sortslices(sign_type, dims=2)
-#     sign_type = unique(sign_type, dims=2)
-#     vsupp = get_basis(n, 2d+1-maximum(df))
-#     ind = [bfind(sign_type, size(sign_type, 2), UInt8.(isodd.(vsupp[:,i])))!=0 for i=1:size(vsupp,2)]
-#     vsupp = vsupp[:, ind]
-#     tsupp1 = [vsupp get_Lsupp(n, vsupp, fsupp, flt)]
-#     tsupp1 = sortslices(tsupp1, dims=2)
-#     tsupp1 = unique(tsupp1, dims=2)
-#     blocks1,vsupp,status = get_vblocks(n, m, 2d+1-maximum(df), tsupp1, vsupp, fsupp, flt, gsupp, glt, basis, TS=TS[1], SO=SO[1], merge=merge, md=md, QUIET=QUIET)
-#     if status == 1
-#         tsupp1 = get_tsupp(n, m, gsupp, glt, basis, blocks1)
-#         tsupp2 = sortslices(vsupp, dims=2)
-#         tsupp2 = unique(tsupp2, dims=2)
-#         blocks2,status = get_blocks(n, m, tsupp2, gsupp, glt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
-#         if status == 1
-#             tsupp2 = get_tsupp(n, m, gsupp, glt, basis, blocks2)
-#             moment = get_moment(n, tsupp2, lb, ub)
-#             opt,wcoe = MPI_SDP(n, m, fsupp, fcoe, flt, gsupp, gcoe, glt, basis, tsupp1, tsupp2, vsupp, blocks1, blocks2, moment, β=β, QUIET=QUIET, solver=solver)
-#             ind = [abs(wcoe[i])>1e-6 for i=1:size(tsupp2, 2)]
-#             wsupp = [prod(x.^tsupp2[:,i]) for i=1:size(tsupp2, 2)]
-#             w = wcoe[ind]'*wsupp[ind]
-#             return opt,w
-#         end
-#     end
-#     return nothing,nothing
-# end
+function GA(f, g, x, d, lb, ub; TS=["block","block"], merge=false, md=3, SO=[1;1], β=1, QUIET=false)
+    n = length(x)
+    m = length(g)
+    fsupp,fcoe,flt,df = polys_info(f, x)
+    gsupp,gcoe,glt,dg = polys_info(g, x)
+    basis = Vector{Array{UInt8,2}}(undef, m+1)
+    basis[1] = get_basis(n, d)
+    for i = 1:m
+        basis[i+1] = get_basis(n, d-Int(ceil(dg[i]/2)))
+    end
+    dv = 2d+1-maximum(df)
+    if TS[1] != false
+        tsupp=zeros(UInt8, n, 1)
+        for i = 1:m
+            tsupp = [tsupp gsupp[i]]
+        end
+        tsupp = [tsupp get_Lsupp(n, tsupp, fsupp, flt)]
+        tsupp = sortslices(tsupp, dims=2)
+        tsupp = unique(tsupp, dims=2)
+        vsupp = tsupp[:, [sum(tsupp[:,i])<=dv for i=1:size(tsupp,2)]]
+        tsupp1 = [vsupp get_Lsupp(n, vsupp, fsupp, flt)]
+        tsupp1 = sortslices(tsupp1, dims=2)
+        tsupp1 = unique(tsupp1, dims=2)
+    else
+        vsupp = get_basis(n, dv)
+        tsupp1 = nothing
+    end
+    blocks1,vsupp,tsupp,status = get_vblocks(n, m, dv, tsupp1, tsupp, vsupp, fsupp, flt, gsupp, glt, basis, TS=TS[1], SO=SO[1], merge=merge, md=md, QUIET=QUIET)
+    if status == 1
+        tsupp1 = get_tsupp(n, m, gsupp, glt, basis, blocks1)
+        tsupp = sortslices(tsupp, dims=2)
+        tsupp = unique(tsupp, dims=2)
+        blocks2,status = get_blocks(n, m, tsupp, gsupp, glt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
+        if status == 1
+            tsupp2 = get_tsupp(n, m, gsupp, glt, basis, blocks2)
+            moment = get_moment(n, tsupp2, lb, ub)
+            opt,wcoe = GA_SDP(n, m, fsupp, fcoe, flt, gsupp, gcoe, glt, basis, tsupp1, tsupp2, vsupp, blocks1, blocks2, moment, β=β, QUIET=QUIET)
+            ind = [abs(wcoe[i])>1e-6 for i=1:size(tsupp2, 2)]
+            wsupp = [prod(x.^tsupp2[:,i]) for i=1:size(tsupp2, 2)]
+            w = wcoe[ind]'*wsupp[ind]
+            return opt,w
+        end
+    end
+    return nothing,nothing
+end
 
-# function GA_SDP(n, m, fsupp, fcoe, flt, gsupp, gcoe, glt, basis, tsupp1, tsupp2, vsupp, blocks1, blocks2, moment; β=1, QUIET=false, solver="Mosek")
-#     if solver == "COSMO"
-#         model = Model(optimizer_with_attributes(COSMO.Optimizer))
-#     else
-#         model = Model(optimizer_with_attributes(Mosek.Optimizer))
-#     end
-#     set_optimizer_attribute(model, MOI.Silent(), QUIET)
-#     ltsupp1 = size(tsupp1, 2)
-#     ltsupp2 = size(tsupp2, 2)
-#     coeff1 = add_putinar!(model, m, tsupp1, gsupp, gcoe, glt, basis, blocks1)
-#     coeff2 = add_putinar!(model, m, tsupp2, gsupp, gcoe, glt, basis, blocks2)
-#     coeff3 = add_putinar!(model, m, tsupp2, gsupp, gcoe, glt, basis, blocks2)
-#     vcoe = @variable(model, [1:size(vsupp,2)])
-#     vfcoe = dvf(n, tsupp1, vsupp, vcoe, fsupp, fcoe, flt, β=β)
-#     @constraint(model, coeff1.==vfcoe)
-#     coeff4 = copy(coeff2)
-#     coeff4[1] -= 1
-#     for i = 1:size(vsupp, 2)
-#         Locb = bfind(tsupp2, ltsupp2, vsupp[:,i])
-#         coeff4[Locb] -= vcoe[i]
-#     end
-#     @constraint(model, coeff4.==coeff3)
-#     ind = [abs(moment[i])>1e-8 for i=1:ltsupp2]
-#     @objective(model, Min, moment[ind]'*coeff2[ind])
-#     optimize!(model)
-#     status=termination_status(model)
-#     if status!=MOI.OPTIMAL
-#        println("termination status: $status")
-#        status=primal_status(model)
-#        println("solution status: $status")
-#     end
-#     wcoe = value.(coeff2)
-#     objv = objective_value(model)
-#     return objv,wcoe
-# end
+function GA_SDP(n, m, fsupp, fcoe, flt, gsupp, gcoe, glt, basis, tsupp1, tsupp2, vsupp, blocks1, blocks2, moment; β=1, QUIET=false)
+    model = Model(optimizer_with_attributes(Mosek.Optimizer))
+    set_optimizer_attribute(model, MOI.Silent(), QUIET)
+    ltsupp1 = size(tsupp1, 2)
+    ltsupp2 = size(tsupp2, 2)
+    coeff1 = add_putinar!(model, m, tsupp1, gsupp, gcoe, glt, basis, blocks1)
+    coeff2 = add_putinar!(model, m, tsupp1, gsupp, gcoe, glt, basis, blocks1)
+    coeff3 = add_putinar!(model, m, tsupp2, gsupp, gcoe, glt, basis, blocks2)
+    coeff4 = add_putinar!(model, m, tsupp2, gsupp, gcoe, glt, basis, blocks2)
+    pcoe = @variable(model, [1:size(vsupp,2)])
+    pfcoe = dvf(n, tsupp1, vsupp, pcoe, fsupp, fcoe, flt, β=β)
+    @constraint(model, coeff1.==pfcoe)
+    qcoe = @variable(model, [1:size(vsupp,2)])
+    qfcoe = dvf(n, tsupp1, vsupp, qcoe, fsupp, fcoe, flt, β=β)
+    @constraint(model, coeff2.==qfcoe)
+    coeff5 = copy(coeff3)
+    coeff5[1] -= 1
+    for i = 1:size(vsupp, 2)
+        Locb = bfind(tsupp2, ltsupp2, vsupp[:,i])
+        coeff5[Locb] -= pcoe[i] + qcoe[i]
+    end
+    @constraint(model, coeff5.==coeff4)
+    ind = [abs(moment[i])>1e-8 for i=1:ltsupp2]
+    @objective(model, Min, moment[ind]'*coeff2[ind])
+    optimize!(model)
+    status = termination_status(model)
+    if status != MOI.OPTIMAL
+       println("termination status: $status")
+       status = primal_status(model)
+       println("solution status: $status")
+    end
+    wcoe = value.(coeff2)
+    objv = objective_value(model)
+    return objv,wcoe
+end
