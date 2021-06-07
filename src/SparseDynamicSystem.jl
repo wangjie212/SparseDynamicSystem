@@ -7,10 +7,9 @@ using LightGraphs
 using LinearAlgebra
 using DynamicPolynomials
 using MultivariatePolynomials
-using COSMO
 using MetaGraphs
 
-export MPI,UPO,BEE,ROA
+export MPI,UPO,BEE,ROA,GA
 
 include("chordal_extension.jl")
 include("clique_merge.jl")
