@@ -1,5 +1,5 @@
 # SparseDynamicSystem
-SparseDynamicSystem computes region of attraction (ROA), maximum positively invariant set (MPI), global attractor (GA) for polynomial dynamic systems based on the sparsity adapted moment-SOS hierarchies. To use SparseDynamicSystem in Julia, run
+SparseDynamicSystem computes outer approximations for maximum positively invariant set (MPI), region of attraction (ROA), global attractor (GA) of polynomial dynamic systems via the sparsity-adapted moment-SOS hierarchy. To use SparseDynamicSystem in Julia, run
 ```Julia
 pkg> add https://github.com/wangjie212/SparseDynamicSystem
  ```
@@ -18,5 +18,5 @@ using DynamicPolynomials
 f = [2*x[2], -0.8*x[1] - 10*(x[1]^2-0.21)*x[2]]
 g = [1.1^2-x[1]^2, 1.1^2-x[2]^2]
 d = 8 # the relaxation order
-opt,w = MPI(f, g, x, d, -1.1*ones(2), 1.1*ones(2), β=1)
+opt,w = MPI(f, g, x, d, -1.1*ones(2), 1.1*ones(2), TS=["block","block"], SO=[1;1], β=1)
 ```
