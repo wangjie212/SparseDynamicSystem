@@ -24,6 +24,7 @@ function MPI(f, g, x, d, lb, ub; TS=["block","block"], merge=false, md=3, SO=[1;
     else
         vsupp = get_basis(n, dv)
         tsupp1 = nothing
+        tsupp = nothing
     end
     blocks1,vsupp,tsupp,status = get_vblocks(n, m, dv, tsupp1, tsupp, vsupp, fsupp, flt, gsupp, glt, basis, TS=TS[1], SO=SO[1], merge=merge, md=md, QUIET=QUIET)
     if status == 1
@@ -31,8 +32,6 @@ function MPI(f, g, x, d, lb, ub; TS=["block","block"], merge=false, md=3, SO=[1;
         if TS[1] != false
             tsupp = sortslices(tsupp, dims=2)
             tsupp = unique(tsupp, dims=2)
-        else
-            tsupp = nothing
         end
         blocks2,status = get_blocks(n, m, tsupp, gsupp, glt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
         if status == 1
@@ -129,6 +128,7 @@ function UPO(f, h, g, x, d; TS="block", SO=1, merge=false, md=3, QUIET=false)
     else
         vsupp = get_basis(n, dv)
         tsupp1 = nothing
+        tsupp = nothing
     end
     blocks,vsupp,tsupp,status = get_vblocks(n, m, dv, tsupp1, tsupp, vsupp, fsupp, flt, gsupp, glt, basis, TS=TS, SO=SO, merge=merge, md=md, QUIET=QUIET)
     if status == 1
@@ -210,6 +210,7 @@ function BEE(f, h, o, g, x, d; TS=["block","block"], SO=[1;1], merge=false, md=3
     else
         vsupp = get_basis(n, dv)
         tsupp1 = nothing
+        tsupp = nothing
     end
     blocks1,vsupp,tsupp,status = get_vblocks(n, m1, dv, tsupp1, tsupp, vsupp, fsupp, flt, osupp, olt, basis, TS=TS[1], SO=SO[1], merge=merge, QUIET=QUIET)
     if status == 1
@@ -217,8 +218,6 @@ function BEE(f, h, o, g, x, d; TS=["block","block"], SO=[1;1], merge=false, md=3
         if TS[1] != false
             tsupp = sortslices(tsupp, dims=2)
             tsupp = unique(tsupp, dims=2)
-        else
-            tsupp = nothing
         end
         blocks2,status = get_blocks(n, m1, tsupp, osupp, olt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
         if status == 1
@@ -340,6 +339,7 @@ function ROA(f, p, q, x, T, d, lb, ub; TS=["block","block"], merge=false, md=3, 
             fsupp[i] = [fsupp[i]; zeros(UInt8, 1, size(fsupp[i],2))]
         end
         tsupp0 = nothing
+        tsupp = nothing
     end
     blocks0,vsupp,tsupp,status = get_vblocks(n+1, m1+1, dv, tsupp0, tsupp, vsupp, fsupp, flt, psupp0, plt0, basis0, TS=TS[1], SO=SO[1], merge=merge, md=md, QUIET=QUIET)
     if status == 1
@@ -347,8 +347,6 @@ function ROA(f, p, q, x, T, d, lb, ub; TS=["block","block"], merge=false, md=3, 
         if TS[1] != false
             tsupp = sortslices(tsupp[1:n,:], dims=2)
             tsupp = unique(tsupp, dims=2)
-        else
-            tsupp = nothing
         end
         blocks1,status = get_blocks(n, m1, tsupp, psupp, plt, basis1, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
         blocks2,status = get_blocks(n, m2, tsupp, qsupp, qlt, basis2, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
@@ -453,12 +451,15 @@ function GA(f, g, x, d, lb, ub; TS=["block","block"], merge=false, md=3, SO=[1;1
     else
         vsupp = get_basis(n, dv)
         tsupp1 = nothing
+        tsupp = nothing
     end
     blocks1,vsupp,tsupp,status = get_vblocks(n, m, dv, tsupp1, tsupp, vsupp, fsupp, flt, gsupp, glt, basis, TS=TS[1], SO=SO[1], merge=merge, md=md, QUIET=QUIET)
     if status == 1
         tsupp1 = get_tsupp(n, m, gsupp, glt, basis, blocks1)
-        tsupp = sortslices(tsupp, dims=2)
-        tsupp = unique(tsupp, dims=2)
+        if TS[1] != false
+            tsupp = sortslices(tsupp, dims=2)
+            tsupp = unique(tsupp, dims=2)
+        end
         blocks2,status = get_blocks(n, m, tsupp, gsupp, glt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
         if status == 1
             tsupp2 = get_tsupp(n, m, gsupp, glt, basis, blocks2)
