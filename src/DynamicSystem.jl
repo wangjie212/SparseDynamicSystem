@@ -33,7 +33,7 @@ function MPI(f, g, x, d, lb, ub; TS=["block","block"], merge=false, md=3, SO=[1;
             tsupp = sortslices(tsupp, dims=2)
             tsupp = unique(tsupp, dims=2)
         end
-        blocks2,status = get_blocks(n, m, tsupp, gsupp, glt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
+        blocks2,_,_,_,_,status = get_blocks(n, m, tsupp, gsupp, glt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
         if status == 1
             tsupp2 = get_tsupp(n, m, gsupp, glt, basis, blocks2)
             moment = get_moment(n, tsupp2, lb, ub)
@@ -219,7 +219,7 @@ function BEE(f, h, o, g, x, d; TS=["block","block"], SO=[1;1], merge=false, md=3
             tsupp = sortslices(tsupp, dims=2)
             tsupp = unique(tsupp, dims=2)
         end
-        blocks2,status = get_blocks(n, m1, tsupp, osupp, olt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
+        blocks2,_,_,_,_,status = get_blocks(n, m1, tsupp, osupp, olt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
         if status == 1
             tsupp2 = get_tsupp(n, m1, osupp, olt, basis, blocks2)
             opt = BEE_SDP(n, m1, m2, fsupp, fcoe, flt, hsupp, hcoe, osupp, ocoe, olt, gsupp, gcoe, glt, basis, tsupp1,
@@ -348,8 +348,8 @@ function ROA(f, p, q, x, T, d, lb, ub; TS=["block","block"], merge=false, md=3, 
             tsupp = sortslices(tsupp[1:n,:], dims=2)
             tsupp = unique(tsupp, dims=2)
         end
-        blocks1,status = get_blocks(n, m1, tsupp, psupp, plt, basis1, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
-        blocks2,status = get_blocks(n, m2, tsupp, qsupp, qlt, basis2, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
+        blocks1,_,_,_,_,status = get_blocks(n, m1, tsupp, psupp, plt, basis1, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
+        blocks2,_,_,_,_,status = get_blocks(n, m2, tsupp, qsupp, qlt, basis2, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
         if status == 1
             tsupp1 = get_tsupp(n, m1, psupp, plt, basis1, blocks1)
             tsupp2 = get_tsupp(n, m2, qsupp, qlt, basis2, blocks2)
@@ -460,7 +460,7 @@ function GA(f, g, x, d, lb, ub; TS=["block","block"], merge=false, md=3, SO=[1;1
             tsupp = sortslices(tsupp, dims=2)
             tsupp = unique(tsupp, dims=2)
         end
-        blocks2,status = get_blocks(n, m, tsupp, gsupp, glt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
+        blocks2,_,_,_,_,status = get_blocks(n, m, tsupp, gsupp, glt, basis, TS=TS[2], SO=SO[2], merge=merge, md=md, QUIET=QUIET)
         if status == 1
             tsupp2 = get_tsupp(n, m, gsupp, glt, basis, blocks2)
             moment = get_moment(n, tsupp2, lb, ub)

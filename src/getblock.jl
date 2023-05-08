@@ -1,25 +1,25 @@
-function get_basis(n, d)
-    lb=binomial(n+d,d)
-    basis=zeros(UInt8,n,lb)
-    i=0
-    t=1
-    while i<d+1
-        t+=1
-        if basis[n,t-1]==i
-           if i<d
-              basis[1,t]=i+1
+function get_basis(n, d; var=Vector(1:n))
+    lb = binomial(length(var)+d, d)
+    basis = zeros(UInt8, n, lb)
+    i = 0
+    t = 1
+    while i < d+1
+        t += 1
+        if basis[var[end], t-1] == i
+           if i < d
+              basis[var[1], t] = i + 1
            end
-           i+=1
+           i += 1
         else
-            j=findfirst(x->basis[x,t-1]!=0, 1:n)
-            basis[:,t]=basis[:,t-1]
-            if j==1
-               basis[1,t]-=1
-               basis[2,t]+=1
+            j = findfirst(x->basis[var[x], t-1] != 0, 1:n)
+            basis[:, t] = basis[:, t-1]
+            if j == 1
+               basis[var[1], t] -= 1
+               basis[var[2], t] += 1
             else
-               basis[1,t]=basis[j,t]-1
-               basis[j,t]=0
-               basis[j+1,t]+=1
+               basis[var[1], t] = basis[var[j], t] - 1
+               basis[var[j], t] = 0
+               basis[var[j+1], t] += 1
             end
         end
     end
@@ -27,21 +27,21 @@ function get_basis(n, d)
 end
 
 function bfind(A, l, a)
-    low=1
-    high=l
-    while low<=high
-        mid=Int(ceil(1/2*(low+high)))
-        if ndims(A)==2
-            temp=A[:, mid]
+    low = 1
+    high = l
+    while low <= high
+        mid = Int(ceil(1/2*(low+high)))
+        if ndims(A) == 2
+            temp = A[:, mid]
         else
-            temp=A[mid]
+            temp = A[mid]
         end
-        if temp==a
+        if temp == a
            return mid
-        elseif temp<a
-           low=mid+1
+        elseif temp < a
+           low = mid + 1
         else
-           high=mid-1
+           high = mid - 1
         end
     end
     return 0
@@ -227,12 +227,18 @@ function get_vblocks(n::Int, m::Int, dv, tsupp1, tsupp, vsupp::Array{UInt8, 2}, 
     return blocks,vsupp,tsupp,status
 end
 
-function get_blocks(n::Int, m::Int, tsupp, gsupp::Vector{Array{UInt8, 2}}, glt, basis::Vector{Array{UInt8, 2}}; TS="block", SO=1, merge=false, md=3, QUIET=false)
+function get_blocks(n::Int, m::Int, tsupp::Array{UInt8, 2}, gsupp::Vector{Array{UInt8, 2}}, glt, basis::Vector{Array{UInt8, 2}}; TS="block", SO=1, merge=false, md=3, QUIET=false)
     blocks = Vector{Vector{Vector{UInt16}}}(undef, m+1)
+    blocksize = Vector{Vector{Int}}(undef, m+1)
+    cl = Vector{Int}(undef, m+1)
     if TS == false
         for k = 1:m+1
             blocks[k] = [[i for i=1:size(basis[k],2)]]
+            blocksize[k] = [size(basis[k],2)]
+            cl[k] = 1          
         end
+        sb = blocksize[1]
+        numb = [1]
         status = 1
     else
         status = 1
@@ -257,20 +263,24 @@ function get_blocks(n::Int, m::Int, tsupp, gsupp::Vector{Array{UInt8, 2}}, glt, 
                         tsupp[:,k] = basis[1][:,blocks[1][i][j]] + basis[1][:,blocks[1][i][r]]
                         k += 1
                     end
-                    tsupp = sortslices(tsupp,dims=2)
-                    tsupp = unique(tsupp,dims=2)
+                    tsupp = sortslices(tsupp, dims=2)
+                    tsupp = unique(tsupp, dims=2)
                 end
             else
-                println("No higher TSSOS hierarchy!")
+                if QUIET == false
+                    println("No higher TSSOS hierarchy!")
+                end
                 status = 0
                 break
             end
         end
         if status == 1
+            blocksize[1] = length.(blocks[1])
+            cl[1] = length(blocksize[1])
+            bz = sort(blocksize[1], rev=true)
+            sb = unique(bz)
+            numb = [sum(bz.== i) for i in sb]
             if QUIET == false
-                blocksize = sort(length.(blocks[1]), rev=true)
-                sb = unique(blocksize)
-                numb = [sum(blocksize.== i) for i in sb]
                 println("------------------------------------------------------")
                 println("The sizes of PSD blocks:\n$sb\n$numb")
                 println("------------------------------------------------------")
@@ -278,10 +288,12 @@ function get_blocks(n::Int, m::Int, tsupp, gsupp::Vector{Array{UInt8, 2}}, glt, 
             for k = 1:m
                 G = get_cgraph(tsupp, gsupp[k], glt[k], basis[k+1])
                 blocks[k+1] = connected_components(G)
+                blocksize[k+1] = length.(blocks[k+1])
+                cl[k+1] = length(blocksize[k+1])
             end
         end
     end
-    return blocks,status
+    return blocks,cl,blocksize,sb,numb,status
 end
 
 function add_putinar!(model, m, tsupp, gsupp, gcoe, glt, basis, blocks; numeq=0)

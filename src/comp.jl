@@ -1,4 +1,4 @@
-function Tacchi(f1, f2, g1, g2, x, d, lb, ub; β=1, QUIET=false)
+function Tacchi(f1, f2, g1, g2, x, d, lb, ub, cliques; β=1, QUIET=false)
     n = length(x)
     m1 = length(g1)
     m2 = length(g2)
@@ -6,31 +6,29 @@ function Tacchi(f1, f2, g1, g2, x, d, lb, ub; β=1, QUIET=false)
     fsupp2,fcoe2,flt2,df2 = polys_info(f2, x)
     gsupp1,gcoe1,glt1,dg1 = polys_info(g1, x)
     gsupp2,gcoe2,glt2,dg2 = polys_info(g2, x)
-    ba1 = get_basis(2, d)
-    ba2 = get_basis(2, 2d)
-    dv = 2d+1-max(maximum(df1),maximum(df2))
-    bav = get_basis(2, dv)
+    n1 = length(cliques[1])
+    n2 = length(cliques[2])
+    dv = 2d + 1 - max(maximum(df1), maximum(df2))
     basis1 = Vector{Array{UInt8,2}}(undef, m1+1)
-    basis1[1] = [ba1; zeros(UInt8, 1, size(ba1,2))]
+    basis1[1] = get_basis(n, d, var=cliques[1])
     for i = 1:m1
-        basis1[i+1] = get_basis(2, d-Int(ceil(dg1[i]/2)))
-        basis1[i+1] = [basis1[i+1]; zeros(UInt8, 1, size(basis1[i+1],2))]
+        basis1[i+1] = get_basis(n, d-Int(ceil(dg1[i]/2)), var=cliques[1])
     end
-    vsupp1 = [bav; zeros(UInt8, 1, size(bav,2))]
-    tsupp1 = [ba2; zeros(UInt8, 1, size(ba2,2))]
+    vsupp1 = get_basis(n, dv, var=cliques[1])
+    tsupp1 = get_basis(n, 2d, var=cliques[1])
     basis2 = Vector{Array{UInt8,2}}(undef, m2+1)
-    basis2[1] = [zeros(UInt8, 1, size(ba1,2)); ba1]
+    basis2[1] = get_basis(n, d, var=cliques[2])
     for i = 1:m2
-        basis2[i+1] = get_basis(2, d-Int(ceil(dg2[i]/2)))
-        basis2[i+1] = [zeros(UInt8, 1, size(basis2[i+1],2)); basis2[i+1]]
+        basis2[i+1] = get_basis(n, d-Int(ceil(dg2[i]/2)), var=cliques[2])
     end
-    tsupp2 = [zeros(UInt8, 1, size(ba2,2)); ba2]
-    vsupp2 = [zeros(UInt8, 1, size(bav,2)); bav]
+    tsupp2 = get_basis(n, 2d, var=cliques[2])
+    vsupp2 = get_basis(n, dv, var=cliques[2])
     tsupp = [tsupp1 tsupp2]
     tsupp = sortslices(tsupp, dims=2)
     tsupp = unique(tsupp, dims=2)
     ltsupp = size(tsupp, 2)
-    moment = get_moment(2, ba2, lb, ub)
+    ts = get_basis(n1, 2d)
+    moment = get_moment(n1, ts, lb, ub)
     model = Model(optimizer_with_attributes(Mosek.Optimizer))
     set_optimizer_attribute(model, MOI.Silent(), QUIET)
     coeff1 = add_putinar!(model, tsupp, m1, gsupp1, gcoe1, glt1, basis1, m2, gsupp2, gcoe2, glt2, basis2)
@@ -52,11 +50,15 @@ function Tacchi(f1, f2, g1, g2, x, d, lb, ub; β=1, QUIET=false)
     end
     @constraint(model, coeff4.==coeff3)
     obj = AffExpr(0)
-    for i = 1:size(ba2,2)
+    for i = 1:length(moment)
         if abs(moment[i]) > 1e-8
-            Locb = bfind(tsupp, ltsupp, [ba2[:,i];0])
+            Locb = bfind(tsupp, ltsupp, tsupp1[:,i])
             obj += moment[i]*coeff2[Locb]
-            Locb = bfind(tsupp, ltsupp, [0;ba2[:,i]])
+        end
+    end
+    for i = 1:length(moment)
+        if abs(moment[i]) > 1e-8
+            Locb = bfind(tsupp, ltsupp, tsupp2[:,i])
             obj += moment[i]*coeff2[Locb]
         end
     end

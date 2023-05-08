@@ -1,5 +1,5 @@
-include("D:\\Programs\\SparseDynamicSystem\\SparseDynamicSystem\\src\\SparseDynamicSystem.jl")
-using .SparseDynamicSystem
+using Revise
+using SparseDynamicSystem
 using DynamicPolynomials
 using Plots
 using LinearAlgebra
@@ -19,9 +19,13 @@ sy = 0.5*sin.(2π*(1:S÷2)*660/S)
 @polyvar x[1:5]
 f = [10*x[1]-12*x[2], -70/3*x[1]+x[2]+125/3*x[1]*x[3], 8/3*x[3]-15*x[1]*x[2], 10*(x[4]-x[1]), x[1]*(28-x[3])-x[5]]
 g = [1-x[1]^2, 1-x[2]^2, 1-x[3]^2, 1-x[4]^2, 1-x[5]^2]
-d = 3
+f1 = f[1:4]
+f2 = [f[1:3]; f[5]]
+g1 = g[1:4]
+g2 = [g[1:3]; g[5]]
+d = 5
 time = @elapsed begin
-opt,w = MPI(f, g, x, d, -ones(5), ones(5), QUIET=true, merge=true, md=3, TS=["block","MD"], SO=[2;1], β=1)
+opt,w = MPI(f, g, x, d, -ones(5), ones(5), QUIET=true, merge=true, md=3, TS=["block","block"], SO=[2;1], β=1)
 end
 println([time, opt])
 time = @elapsed begin
@@ -47,16 +51,16 @@ f = [(x[1]^2+x[2]^2-1/4)*x[1], (x[2]^2+x[3]^2-1/4)*x[2], (x[2]^2+x[3]^2-1/4)*x[3
 g = [1-x[1]^2, 1-x[2]^2, 1-x[3]^2]
 f1 = [(x[1]^2+x[2]^2-1/4)*x[1]]
 f2 = [(x[2]^2+x[3]^2-1/4)*x[2], (x[2]^2+x[3]^2-1/4)*x[3]]
-g1 = [1-x[1]^2]
+g1 = [1-x[1]^2, 1-x[2]^2]
 g2 = [1-x[2]^2, 1-x[3]^2]
 
-d = 9
+d = 11
 time = @elapsed begin
-opt,w = MPI(f, g, x, d, -ones(3), ones(3), QUIET=true, merge=true, md=3, TS=["block","MD"], SO=[2;1])
+opt,w = MPI(f, g, x, d, -ones(3), ones(3), QUIET=true, merge=true, md=2, TS=["block","block"], SO=[2;1])
 end
 println([time, opt])
 time = @elapsed begin
-opt,w = Tacchi(f1, f2, g1, g2, x, d, -ones(2), ones(2), QUIET=true)
+opt,w = Tacchi(f1, f2, g1, g2, x, d, -ones(2), ones(2), [[1;2], [2;3]], QUIET=true)
 end
 println([time, opt])
 
