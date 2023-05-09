@@ -1,29 +1,26 @@
 using JuMP
+using Revise
 using MosekTools
 using DynamicPolynomials
 using MultivariatePolynomials
 using SparseDynamicSystem
 
-@polyvar y[1:3]
-x = reverse(y)
+n = 3
+@polyvar x[1:n]
 f = [(x[1]^2+x[2]^2-1/4)*x[1], (x[2]^2+x[3]^2-1/4)*x[2], (x[2]^2+x[3]^2-1/4)*x[3]]
 g = [1-x[1]^2, 1-x[2]^2, 1-x[3]^2]
 d = 3
 
 model = Model(optimizer_with_attributes(Mosek.Optimizer))
 set_optimizer_attribute(model, MOI.Silent(), true)
-vb = reverse(monomials(y, 0:2d-2))
-vc = @variable(model, [1:length(vb)])
-v = vc'*vb
-wb = reverse(monomials(y, 0:2d))
-wc = @variable(model, [1:length(wb)])
-w = wc'*wb
-tsupp = get_basis(3, 2d)
-moment = get_moment(3, tsupp, -ones(3), ones(3))
+v, vc, vb = add_poly!(model, x, 2d-2)
+w, wc, wb = add_poly!(model, x, 2d)
 Lv = v - sum(f .* differentiate(v, x))
-model,_,_,_,_,_,_ = add_psatz!(model, Lv, x, g, [], d, QUIET=true, CS=true, TS="block", SO=1, Groebnerbasis=false)
-model,_,_,_,_,_,_ = add_psatz!(model, w, x, g, [], d, QUIET=true, CS=true, TS="block", SO=1, Groebnerbasis=false)
-model,_,_,_,_,_,_ = add_psatz!(model, w-v-1, x, g, [], d, QUIET=true, CS=true, TS="block", SO=1, Groebnerbasis=false)
+model,info1 = add_psatz!(model, Lv, x, g, [], d, QUIET=true, CS=true, TS="block", SO=1, Groebnerbasis=false)
+model,info2 = add_psatz!(model, w, x, g, [], d, QUIET=true, CS=true, TS="block", SO=1, Groebnerbasis=false)
+model,info3 = add_psatz!(model, w-v-1, x, g, [], d, QUIET=true, CS=true, TS="block", SO=1, Groebnerbasis=false)
+supp = get_basis(n, 2d, var=Vector(n:-1:1))
+moment = get_moment(n, supp, -ones(n), ones(n))
 @objective(model, Min, sum(moment.*wc))
 optimize!(model)
 status = termination_status(model)

@@ -1,10 +1,17 @@
 using SemialgebraicSets
 
+mutable struct struct_data
+    cliques # the clique structrue
+    cql # number of cliques
+    cliquesize # size of cliques
+    blocks # the block structrue
+    cl # number of blocks
+    blocksize # size of blocks
+end
+
 function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS="block", SO=1, Groebnerbasis=true, QUIET=false)
     n = length(vars)
     m = length(ineq_cons)
-    l = length(eq_cons)
-    fsupp,fcoe = poly_info(nonneg, vars)
     if ineq_cons != []
         gsupp,gcoe,glt,dg = polys_info(ineq_cons, vars)
     else
@@ -17,20 +24,24 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
         hsupp = Matrix{UInt8}[]
         hlt = Int[]
     end
-    if Groebnerbasis == true
+    if Groebnerbasis == true && eq_cons != []
+        l = 0
         gb = convert.(Polynomial{true,Float64}, eq_cons)
+        nonneg = rem(nonneg, gb)
         SemialgebraicSets.gröbnerbasis!(gb)
-        lead = leadingmonomial.(gb)
-        llead = length(lead)
-        leadsupp = zeros(UInt8, n, llead)
+        leadm = leadingmonomial.(gb)
+        llead = length(leadm)
+        lead = zeros(UInt8, n, llead)
         for i = 1:llead, j = 1:n
-            @inbounds leadsupp[j,i] = MultivariatePolynomials.degree(lead[i], x[j])
+            @inbounds lead[j,i] = MultivariatePolynomials.degree(leadm[i], vars[j])
         end
     else
         gb = []
+        l = length(eq_cons)
     end
+    fsupp,fcoe = poly_info(nonneg, vars)
     if CS == true
-        cliques,cql,cliquesize = clique_decomp(n, m, l, fsupp, gsupp, hsupp)
+        cliques,cql,cliquesize = clique_decomp(n, m, length(eq_cons), fsupp, gsupp, hsupp)
     else
         cliques,cql,cliquesize = [Vector(1:n)],1,[n]
     end
@@ -80,6 +91,19 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
             q += 1
         end
     end
+    if !isempty(gb)
+        tsupp = unique(tsupp, dims=2)
+        nsupp = zeros(UInt8, n)
+        for col in eachcol(tsupp)
+            if divide(col, lead, n, llead)
+                temp = reminder(col, vars, gb, n)[2]
+                nsupp = [nsupp temp]
+            else
+                nsupp = [nsupp col]
+            end
+        end
+        tsupp = nsupp
+    end
     tsupp = sortslices(tsupp, dims=2)
     tsupp = unique(tsupp, dims=2)
     ltsupp = size(tsupp, 2)
@@ -91,7 +115,7 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
                pos = @variable(model, lower_bound=0)
                bi = 2*basis[t][1][:, blocks[t][1][i][1]]
                if !isempty(gb) && divide(bi, lead, n, llead)
-                    bi_lm,bi_supp,bi_coe = reminder(bi, x, gb, n)
+                    bi_lm,bi_supp,bi_coe = reminder(bi, vars, gb, n)
                     for z = 1:bi_lm
                         Locb = bfind(tsupp, ltsupp, bi_supp[:,z])
                         @inbounds add_to_expression!(cons[Locb], bi_coe[z], pos)
@@ -104,12 +128,24 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
                pos = @variable(model, [1:bs, 1:bs], PSD)
                for j = 1:bs, r = j:bs
                    bi = basis[t][1][:, blocks[t][1][i][j]] + basis[t][1][:, blocks[t][1][i][r]]
-                   Locb = bfind(tsupp, ltsupp, bi)
-                   if j == r
-                      @inbounds add_to_expression!(cons[Locb], pos[j,r])
+                   if !isempty(gb) && divide(bi, lead, n, llead)
+                        bi_lm,bi_supp,bi_coe = reminder(bi, vars, gb, n)
+                        for z = 1:bi_lm
+                            Locb = bfind(tsupp, ltsupp, bi_supp[:,z])
+                            if j == r
+                                @inbounds add_to_expression!(cons[Locb], bi_coe[z], pos[j,r])
+                            else
+                                @inbounds add_to_expression!(cons[Locb], 2*bi_coe[z], pos[j,r])
+                            end
+                        end
                    else
-                      @inbounds add_to_expression!(cons[Locb], 2, pos[j,r])
-                   end
+                        Locb = bfind(tsupp, ltsupp, bi)
+                        if j == r
+                            @inbounds add_to_expression!(cons[Locb], pos[j,r])
+                        else
+                            @inbounds add_to_expression!(cons[Locb], 2, pos[j,r])
+                        end
+                    end
                end
             end
         end
@@ -119,18 +155,38 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
                 pos = @variable(model, lower_bound=0)
                 for s = 1:glt[I[t][k]]
                     bi = 2*basis[t][k+1][:, blocks[t][k+1][i][1]] + gsupp[I[t][k]][:,s]
-                    Locb = bfind(tsupp, ltsupp, bi)
-                    @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s], pos)
+                    if !isempty(gb) && divide(bi, lead, n, llead)
+                        bi_lm,bi_supp,bi_coe = reminder(bi, vars, gb, n)
+                        for z = 1:bi_lm
+                            Locb = bfind(tsupp, ltsupp, bi_supp[:,z])
+                            @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s]*bi_coe[z], pos)
+                        end
+                    else
+                        Locb = bfind(tsupp, ltsupp, bi)
+                        @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s], pos)
+                    end
                 end
             else
                 pos = @variable(model, [1:bs, 1:bs], PSD)
                 for j = 1:bs, r = j:bs, s = 1:glt[I[t][k]]
                     bi = basis[t][k+1][:, blocks[t][k+1][i][j]] + basis[t][k+1][:, blocks[t][k+1][i][r]] + gsupp[I[t][k]][:,s]
-                    Locb = bfind(tsupp, ltsupp, bi)
-                    if j == r
-                       @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s], pos[j,r])
-                    else
-                       @inbounds add_to_expression!(cons[Locb], 2*gcoe[I[t][k]][s], pos[j,r])
+                    if !isempty(gb) && divide(bi, lead, n, llead)
+                        bi_lm,bi_supp,bi_coe = reminder(bi, vars, gb, n)
+                        for z = 1:bi_lm
+                            Locb = bfind(tsupp, ltsupp, bi_supp[:,z])
+                            if j == r
+                                @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s]*bi_coe[z], pos[j,r])
+                            else
+                                @inbounds add_to_expression!(cons[Locb], 2*gcoe[I[t][k]][s]*bi_coe[z], pos[j,r])
+                            end
+                        end
+                   else
+                        Locb = bfind(tsupp, ltsupp, bi)
+                        if j == r
+                            @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s], pos[j,r])
+                        else
+                            @inbounds add_to_expression!(cons[Locb], 2*gcoe[I[t][k]][s], pos[j,r])
+                        end
                     end
                 end
             end
@@ -169,7 +225,8 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
         end
     end
     @constraint(model, cons.==bc)
-    return model,cliques,cql,cliquesize,blocks,cl,blocksize
+    info = struct_data(cliques,cql,cliquesize,blocks,cl,blocksize)
+    return model,info
 end
 
 function clique_decomp(n, m, l, fsupp, gsupp, hsupp)
@@ -276,4 +333,11 @@ function reminder(a, x, gb, n)
         @inbounds supp[j,i]=MultivariatePolynomials.degree(mon[i],x[j])
     end
     return lm,supp,coe
+end
+
+function add_poly!(model, vars, degree)
+    mon = reverse(monomials(vars, 0:degree))
+    coe = @variable(model, [1:length(mon)])
+    p = coe'*mon
+    return p,coe,mon
 end
