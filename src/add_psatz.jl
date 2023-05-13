@@ -4,25 +4,27 @@ mutable struct struct_data
     cliques # the clique structrue
     cql # number of cliques
     cliquesize # size of cliques
+    basis # monomial basis
     blocks # the block structrue
     cl # number of blocks
     blocksize # size of blocks
+    tsupp # total support
 end
 
-function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS="block", SO=1, Groebnerbasis=true, QUIET=false)
+function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS="block", SO=1, Groebnerbasis=false, QUIET=false)
     n = length(vars)
     m = length(ineq_cons)
     if ineq_cons != []
         gsupp,gcoe,glt,dg = polys_info(ineq_cons, vars)
     else
         gsupp = Matrix{UInt8}[]
-        glt = Int[]
+        glt = dg = Int[]
     end
     if eq_cons != []
         hsupp,hcoe,hlt,dh = polys_info(eq_cons, vars)
     else
         hsupp = Matrix{UInt8}[]
-        hlt = Int[]
+        hlt = dh = Int[]
     end
     if Groebnerbasis == true && eq_cons != []
         l = 0
@@ -40,6 +42,8 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
         l = length(eq_cons)
     end
     fsupp,fcoe = poly_info(nonneg, vars)
+    dmin = ceil(Int, maximum([maxdegree(nonneg); dg; dh])/2)
+    order = order < dmin ? dmin : order
     if CS == true
         cliques,cql,cliquesize = clique_decomp(n, m, length(eq_cons), fsupp, gsupp, hsupp)
     else
@@ -60,7 +64,7 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
     blocks,cl,blocksize,sb,numb,status = get_cblocks_mix(n, I, J, m, l, fsupp, gsupp, glt, hsupp, hlt, basis, cliques, cql, tsupp=[], TS=TS, SO=SO, QUIET=QUIET)
     ne = 0
     for t = 1:cql
-        ne = sum(numele(blocksize[t][1]))
+        ne += sum(numele(blocksize[t][1]))
         if I[t] != []
             ne += sum(glt[I[t][k]]*numele(blocksize[t][k+1]) for k=1:length(I[t]))
         end
@@ -106,6 +110,7 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
     end
     tsupp = sortslices(tsupp, dims=2)
     tsupp = unique(tsupp, dims=2)
+    info = struct_data(cliques,cql,cliquesize,basis,blocks,cl,blocksize,tsupp)
     ltsupp = size(tsupp, 2)
     cons = [AffExpr(0) for i=1:ltsupp]
     for t = 1:cql
@@ -219,13 +224,12 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
         Locb = bfind(tsupp, ltsupp, fsupp[:,i])
         if Locb == 0
             @error "The monomial basis is not enough!"
-            return nothing,nothing,nothing,nothing,nothing,nothing,nothing
+            return model,info
         else
             bc[Locb] = fcoe[i]
         end
     end
     @constraint(model, cons.==bc)
-    info = struct_data(cliques,cql,cliquesize,blocks,cl,blocksize)
     return model,info
 end
 
@@ -301,7 +305,7 @@ function get_cblocks_mix(n, I, J, m, l, fsupp, gsupp, glt, hsupp, hlt, basis, cl
     status = ones(Int, cql)
     for i = 1:cql
         lc = length(I[i]) + length(J[i])
-        ind = [issubset(tsupp[:, j], cliques[i]) for j = 1:size(tsupp, 2)]
+        ind = [issubset(findall(tsupp[:,j] .!= 0), cliques[i]) for j = 1:size(tsupp, 2)]
         supp = [tsupp[:, ind] UInt8(2)*basis[i][1]]
         supp = sortslices(supp, dims=2)
         supp = unique(supp, dims=2)
