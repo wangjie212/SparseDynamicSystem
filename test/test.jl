@@ -49,14 +49,14 @@ end
 @polyvar x[1:3]
 f = [(x[1]^2+x[2]^2-1/4)*x[1], (x[2]^2+x[3]^2-1/4)*x[2], (x[2]^2+x[3]^2-1/4)*x[3]]
 g = [1-x[1]^2, 1-x[2]^2, 1-x[3]^2]
-f1 = [(x[1]^2+x[2]^2-1/4)*x[1]]
+f1 = [(x[1]^2+x[2]^2-1/4)*x[1], (x[1]^2+x[2]^2-1/4)*x[1]]
 f2 = [(x[2]^2+x[3]^2-1/4)*x[2], (x[2]^2+x[3]^2-1/4)*x[3]]
 g1 = [1-x[1]^2, 1-x[2]^2]
 g2 = [1-x[2]^2, 1-x[3]^2]
 
 d = 11
 time = @elapsed begin
-opt,w = MPI(f, g, x, d, -ones(3), ones(3), QUIET=true, merge=true, md=2, TS=["block","block"], SO=[2;1])
+opt,w = MPI(f, g, x, d, -ones(3), ones(3), QUIET=true, merge=true, md=2, TS=["block","block"], SO=[1;2])
 end
 println([time, opt])
 time = @elapsed begin
@@ -65,11 +65,11 @@ end
 println([time, opt])
 
 # Comparison with the approach of [12]
-# TS=["block","block"], SO=[3;1]
+# TS=["block","block"], SO=[2;1]
 @polyvar x[1:3]
-f = [x[2], (x[2]^2+x[1]^2-1/4)*x[1], (x[2]^2+x[3]^2-1/4)*x[3]]
+f = [(x[2]^2+x[1]^2-1/4)*x[1], x[2], (x[2]^2+x[3]^2-1/4)*x[3]]
 g = [1-x[1]^2, 1-x[2]^2, 1-x[3]^2]
-f1 = [x[2], (x[2]^2+x[1]^2-1/4)*x[1]]
+f1 = [(x[2]^2+x[1]^2-1/4)*x[1], x[2]]
 f2 = [x[2], (x[2]^2+x[3]^2-1/4)*x[3]]
 g1 = [1-x[1]^2, 1-x[2]^2]
 g2 = [1-x[2]^2, 1-x[3]^2]

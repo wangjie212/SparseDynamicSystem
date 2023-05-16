@@ -50,7 +50,7 @@ end
 function MPI_SDP(n, m, fsupp, fcoe, flt, gsupp, gcoe, glt, basis, tsupp1, tsupp2, vsupp, blocks1, blocks2, moment; β=1, QUIET=false)
     model = Model(optimizer_with_attributes(Mosek.Optimizer))
     set_optimizer_attribute(model, MOI.Silent(), QUIET)
-    ltsupp1 = size(tsupp1, 2)
+    # ltsupp1 = size(tsupp1, 2)
     ltsupp2 = size(tsupp2, 2)
     coeff1 = add_putinar!(model, m, tsupp1, gsupp, gcoe, glt, basis, blocks1)
     coeff2 = add_putinar!(model, m, tsupp2, gsupp, gcoe, glt, basis, blocks2)

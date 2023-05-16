@@ -227,7 +227,7 @@ function get_vblocks(n::Int, m::Int, dv, tsupp1, tsupp, vsupp::Array{UInt8, 2}, 
     return blocks,vsupp,tsupp,status
 end
 
-function get_blocks(n::Int, m::Int, tsupp::Array{UInt8, 2}, gsupp::Vector{Array{UInt8, 2}}, glt, basis::Vector{Array{UInt8, 2}}; TS="block", SO=1, merge=false, md=3, QUIET=false)
+function get_blocks(n::Int, m::Int, tsupp, gsupp::Vector{Array{UInt8, 2}}, glt, basis::Vector{Array{UInt8, 2}}; TS="block", SO=1, merge=false, md=3, QUIET=false)
     blocks = Vector{Vector{Vector{UInt16}}}(undef, m+1)
     blocksize = Vector{Vector{Int}}(undef, m+1)
     cl = Vector{Int}(undef, m+1)
@@ -256,10 +256,10 @@ function get_blocks(n::Int, m::Int, tsupp::Array{UInt8, 2}, gsupp::Vector{Array{
             if nblock != blocks[1]
                 blocks[1] = nblock
                 if i < SO
-                    blocksize = length.(blocks[1])
-                    tsupp = zeros(UInt8, n, Int(sum(Int.(blocksize).^2+blocksize)/2))
+                    blocksize[1] = length.(blocks[1])
+                    tsupp = zeros(UInt8, n, numele(blocksize[1]))
                     k = 1
-                    for i = 1:length(blocks[1]), j = 1:blocksize[i], r = j:blocksize[i]
+                    for i = 1:length(blocks[1]), j = 1:blocksize[1][i], r = j:blocksize[1][i]
                         tsupp[:,k] = basis[1][:,blocks[1][i][j]] + basis[1][:,blocks[1][i][r]]
                         k += 1
                     end
@@ -271,6 +271,7 @@ function get_blocks(n::Int, m::Int, tsupp::Array{UInt8, 2}, gsupp::Vector{Array{
                     println("No higher TSSOS hierarchy!")
                 end
                 status = 0
+                sb = numb = nothing
                 break
             end
         end
