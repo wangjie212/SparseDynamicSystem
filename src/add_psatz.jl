@@ -9,9 +9,12 @@ mutable struct struct_data
     cl # number of blocks
     blocksize # size of blocks
     tsupp # total support
+    I # index sets of inequality constraints
+    J # index sets of equality constraints
+    gram # Gram variables
 end
 
-function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS="block", SO=1, Groebnerbasis=false, QUIET=false)
+function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, cliques=[], TS="block", SO=1, Groebnerbasis=false, QUIET=false)
     n = length(vars)
     m = length(ineq_cons)
     if ineq_cons != []
@@ -45,7 +48,12 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
     dmin = ceil(Int, maximum([maxdegree(nonneg); dg; dh])/2)
     order = order < dmin ? dmin : order
     if CS == true
-        cliques,cql,cliquesize = clique_decomp(n, m, length(eq_cons), fsupp, gsupp, hsupp)
+        if cliques == []
+            cliques,cql,cliquesize = clique_decomp(n, m, length(eq_cons), fsupp, gsupp, hsupp)
+        else
+            cql = length(cliques)
+            cliquesize = length.(cliques)
+        end
     else
         cliques,cql,cliquesize = [Vector(1:n)],1,[n]
     end
@@ -110,27 +118,29 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
     end
     tsupp = sortslices(tsupp, dims=2)
     tsupp = unique(tsupp, dims=2)
-    info = struct_data(cliques,cql,cliquesize,basis,blocks,cl,blocksize,tsupp)
     ltsupp = size(tsupp, 2)
     cons = [AffExpr(0) for i=1:ltsupp]
+    pos = Vector{Vector{Vector{Union{VariableRef,Symmetric{VariableRef}}}}}(undef, cql)
     for t = 1:cql
+        pos[t] = Vector{Vector{Union{VariableRef,Symmetric{VariableRef}}}}(undef, 1+length(I[t])+length(J[t]))
+        pos[t][1] = Vector{Union{VariableRef,Symmetric{VariableRef}}}(undef, cl[t][1])
         for i = 1:cl[t][1]
             bs = blocksize[t][1][i]
             if bs == 1
-               pos = @variable(model, lower_bound=0)
+               pos[t][1][i] = @variable(model, lower_bound=0)
                bi = 2*basis[t][1][:, blocks[t][1][i][1]]
                if !isempty(gb) && divide(bi, lead, n, llead)
                     bi_lm,bi_supp,bi_coe = reminder(bi, vars, gb, n)
                     for z = 1:bi_lm
                         Locb = bfind(tsupp, ltsupp, bi_supp[:,z])
-                        @inbounds add_to_expression!(cons[Locb], bi_coe[z], pos)
+                        @inbounds add_to_expression!(cons[Locb], bi_coe[z], pos[t][1][i])
                     end
                else
                     Locb = bfind(tsupp, ltsupp, bi)
-                    @inbounds add_to_expression!(cons[Locb], pos)
+                    @inbounds add_to_expression!(cons[Locb], pos[t][1][i])
                end
             else
-               pos = @variable(model, [1:bs, 1:bs], PSD)
+               pos[t][1][i] = @variable(model, [1:bs, 1:bs], PSD)
                for j = 1:bs, r = j:bs
                    bi = basis[t][1][:, blocks[t][1][i][j]] + basis[t][1][:, blocks[t][1][i][r]]
                    if !isempty(gb) && divide(bi, lead, n, llead)
@@ -138,82 +148,88 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
                         for z = 1:bi_lm
                             Locb = bfind(tsupp, ltsupp, bi_supp[:,z])
                             if j == r
-                                @inbounds add_to_expression!(cons[Locb], bi_coe[z], pos[j,r])
+                                @inbounds add_to_expression!(cons[Locb], bi_coe[z], pos[t][1][i][j,r])
                             else
-                                @inbounds add_to_expression!(cons[Locb], 2*bi_coe[z], pos[j,r])
+                                @inbounds add_to_expression!(cons[Locb], 2*bi_coe[z], pos[t][1][i][j,r])
                             end
                         end
                    else
                         Locb = bfind(tsupp, ltsupp, bi)
                         if j == r
-                            @inbounds add_to_expression!(cons[Locb], pos[j,r])
+                            @inbounds add_to_expression!(cons[Locb], pos[t][1][i][j,r])
                         else
-                            @inbounds add_to_expression!(cons[Locb], 2, pos[j,r])
+                            @inbounds add_to_expression!(cons[Locb], 2, pos[t][1][i][j,r])
                         end
                     end
                end
             end
         end
-        for k = 1:length(I[t]), i = 1:length(blocks[t][k+1])
-            bs = length(blocks[t][k+1][i])
-            if bs == 1
-                pos = @variable(model, lower_bound=0)
-                for s = 1:glt[I[t][k]]
-                    bi = 2*basis[t][k+1][:, blocks[t][k+1][i][1]] + gsupp[I[t][k]][:,s]
-                    if !isempty(gb) && divide(bi, lead, n, llead)
-                        bi_lm,bi_supp,bi_coe = reminder(bi, vars, gb, n)
-                        for z = 1:bi_lm
-                            Locb = bfind(tsupp, ltsupp, bi_supp[:,z])
-                            @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s]*bi_coe[z], pos)
-                        end
-                    else
-                        Locb = bfind(tsupp, ltsupp, bi)
-                        @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s], pos)
-                    end
-                end
-            else
-                pos = @variable(model, [1:bs, 1:bs], PSD)
-                for j = 1:bs, r = j:bs, s = 1:glt[I[t][k]]
-                    bi = basis[t][k+1][:, blocks[t][k+1][i][j]] + basis[t][k+1][:, blocks[t][k+1][i][r]] + gsupp[I[t][k]][:,s]
-                    if !isempty(gb) && divide(bi, lead, n, llead)
-                        bi_lm,bi_supp,bi_coe = reminder(bi, vars, gb, n)
-                        for z = 1:bi_lm
-                            Locb = bfind(tsupp, ltsupp, bi_supp[:,z])
-                            if j == r
-                                @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s]*bi_coe[z], pos[j,r])
-                            else
-                                @inbounds add_to_expression!(cons[Locb], 2*gcoe[I[t][k]][s]*bi_coe[z], pos[j,r])
+        for k = 1:length(I[t])
+            pos[t][k+1] = Vector{Union{VariableRef,Symmetric{VariableRef}}}(undef, cl[t][k+1])
+            for i = 1:length(blocks[t][k+1])
+                bs = length(blocks[t][k+1][i])
+                if bs == 1
+                    pos[t][k+1][i] = @variable(model, lower_bound=0)
+                    for s = 1:glt[I[t][k]]
+                        bi = 2*basis[t][k+1][:, blocks[t][k+1][i][1]] + gsupp[I[t][k]][:,s]
+                        if !isempty(gb) && divide(bi, lead, n, llead)
+                            bi_lm,bi_supp,bi_coe = reminder(bi, vars, gb, n)
+                            for z = 1:bi_lm
+                                Locb = bfind(tsupp, ltsupp, bi_supp[:,z])
+                                @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s]*bi_coe[z], pos[t][k+1][i])
                             end
-                        end
-                   else
-                        Locb = bfind(tsupp, ltsupp, bi)
-                        if j == r
-                            @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s], pos[j,r])
                         else
-                            @inbounds add_to_expression!(cons[Locb], 2*gcoe[I[t][k]][s], pos[j,r])
+                            Locb = bfind(tsupp, ltsupp, bi)
+                            @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s], pos[t][k+1][i])
+                        end
+                    end
+                else
+                    pos[t][k+1][i] = @variable(model, [1:bs, 1:bs], PSD)
+                    for j = 1:bs, r = j:bs, s = 1:glt[I[t][k]]
+                        bi = basis[t][k+1][:, blocks[t][k+1][i][j]] + basis[t][k+1][:, blocks[t][k+1][i][r]] + gsupp[I[t][k]][:,s]
+                        if !isempty(gb) && divide(bi, lead, n, llead)
+                            bi_lm,bi_supp,bi_coe = reminder(bi, vars, gb, n)
+                            for z = 1:bi_lm
+                                Locb = bfind(tsupp, ltsupp, bi_supp[:,z])
+                                if j == r
+                                    @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s]*bi_coe[z], pos[t][k+1][i][j,r])
+                                else
+                                    @inbounds add_to_expression!(cons[Locb], 2*gcoe[I[t][k]][s]*bi_coe[z], pos[t][k+1][i][j,r])
+                                end
+                            end
+                       else
+                            Locb = bfind(tsupp, ltsupp, bi)
+                            if j == r
+                                @inbounds add_to_expression!(cons[Locb], gcoe[I[t][k]][s], pos[t][k+1][i][j,r])
+                            else
+                                @inbounds add_to_expression!(cons[Locb], 2*gcoe[I[t][k]][s], pos[t][k+1][i][j,r])
+                            end
                         end
                     end
                 end
             end
         end
-        for k = 1:length(J[t]), i = 1:length(blocks[t][k+length(I[t])+1])
-            bs = length(blocks[t][k+length(I[t])+1][i])
-            if bs == 1
-                pos = @variable(model)
-                for s = 1:hlt[J[t][k]]
-                    bi = 2*basis[t][k+length(I[t])+1][:, blocks[t][k+length(I[t])+1][i][1]] + hsupp[J[t][k]][:,s]
-                    Locb = bfind(tsupp, ltsupp, bi)
-                    @inbounds add_to_expression!(cons[Locb], hcoe[J[t][k]][s], pos)
-                end
-            else
-                pos = @variable(model, [1:bs, 1:bs], Symmetric)
-                for j = 1:bs, r = j:bs, s = 1:hlt[J[t][k]]
-                    bi = basis[t][k+length(I[t])+1][:, blocks[t][k+length(I[t])+1][i][j]] + basis[t][k+length(I[t])+1][:, blocks[t][k+length(I[t])+1][i][r]] + hsupp[J[t][k]][:,s]
-                    Locb = bfind(tsupp, ltsupp, bi)
-                    if j == r
-                       @inbounds add_to_expression!(cons[Locb], hcoe[J[t][k]][s], pos[j,r])
-                    else
-                       @inbounds add_to_expression!(cons[Locb], 2*hcoe[J[t][k]][s], pos[j,r])
+        for k = 1:length(J[t])
+            pos[t][k+length(I[t])+1] = Vector{Union{VariableRef,Symmetric{VariableRef}}}(undef, cl[t][k+length(I[t])+1])
+            for i = 1:length(blocks[t][k+length(I[t])+1])
+                bs = length(blocks[t][k+length(I[t])+1][i])
+                if bs == 1
+                    pos[t][k+length(I[t])+1][i] = @variable(model)
+                    for s = 1:hlt[J[t][k]]
+                        bi = 2*basis[t][k+length(I[t])+1][:, blocks[t][k+length(I[t])+1][i][1]] + hsupp[J[t][k]][:,s]
+                        Locb = bfind(tsupp, ltsupp, bi)
+                        @inbounds add_to_expression!(cons[Locb], hcoe[J[t][k]][s], pos[t][k+length(I[t])+1][i])
+                    end
+                else
+                    pos[t][k+length(I[t])+1][i] = @variable(model, [1:bs, 1:bs], Symmetric)
+                    for j = 1:bs, r = j:bs, s = 1:hlt[J[t][k]]
+                        bi = basis[t][k+length(I[t])+1][:, blocks[t][k+length(I[t])+1][i][j]] + basis[t][k+length(I[t])+1][:, blocks[t][k+length(I[t])+1][i][r]] + hsupp[J[t][k]][:,s]
+                        Locb = bfind(tsupp, ltsupp, bi)
+                        if j == r
+                           @inbounds add_to_expression!(cons[Locb], hcoe[J[t][k]][s], pos[t][k+length(I[t])+1][i][j,r])
+                        else
+                           @inbounds add_to_expression!(cons[Locb], 2*hcoe[J[t][k]][s], pos[t][k+length(I[t])+1][i][j,r])
+                        end
                     end
                 end
             end
@@ -230,6 +246,7 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, TS
         end
     end
     @constraint(model, cons.==bc)
+    info = struct_data(cliques,cql,cliquesize,basis,blocks,cl,blocksize,tsupp,I,J,pos)
     return model,info
 end
 
