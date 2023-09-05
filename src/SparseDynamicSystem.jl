@@ -9,7 +9,7 @@ using DynamicPolynomials
 using MultivariatePolynomials
 using MetaGraphs
 
-export get_basis, get_moment, MPI, UPO, BEE, ROA, GA, Tacchi, add_psatz!, add_poly!
+export get_basis, get_moment, get_moment_matrix, MPI, UPO, BEE, ROA, GA, Tacchi, add_psatz!, add_poly!
 
 include("clique_merge.jl")
 include("getblock.jl")

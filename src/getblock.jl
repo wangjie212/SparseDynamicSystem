@@ -103,7 +103,7 @@ function polys_info(p, x)
     n = length(x)
     dp = zeros(Int, m)
     pcoe = Vector{Vector{Float64}}(undef, m)
-    psupp = Vector{Array{UInt8,2}}(undef, m)
+    psupp = Vector{Matrix{UInt8}}(undef, m)
     plt = Vector{Int}(undef, m)
     for i = 1:m
         dp[i] = maxdegree(p[i])

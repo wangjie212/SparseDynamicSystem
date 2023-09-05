@@ -12,9 +12,10 @@ mutable struct struct_data
     I # index sets of inequality constraints
     J # index sets of equality constraints
     gram # Gram variables
+    constrs # constraint name
 end
 
-function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, cliques=[], TS="block", SO=1, Groebnerbasis=false, QUIET=false)
+function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, cliques=[], TS="block", SO=1, Groebnerbasis=false, QUIET=false, constrs=nothing)
     n = length(vars)
     m = length(ineq_cons)
     if ineq_cons != []
@@ -49,7 +50,7 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, cl
     order = order < dmin ? dmin : order
     if CS == true
         if cliques == []
-            cliques,cql,cliquesize = clique_decomp(n, m, length(eq_cons), fsupp, gsupp, hsupp)
+            cliques,cql,cliquesize = clique_decomp(n, m, length(eq_cons), fsupp, gsupp, hsupp, QUIET=QUIET)
         else
             cql = length(cliques)
             cliquesize = length.(cliques)
@@ -237,7 +238,7 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, cl
     end
     bc = [AffExpr(0) for i=1:ltsupp]
     for i = 1:size(fsupp, 2)
-        Locb = bfind(tsupp, ltsupp, fsupp[:,i])
+        Locb = bfind(tsupp, ltsupp, fsupp[:, i])
         if Locb == 0
             @error "The monomial basis is not enough!"
             return model,info
@@ -245,15 +246,19 @@ function add_psatz!(model, nonneg, vars, ineq_cons, eq_cons, order; CS=false, cl
             bc[Locb] = fcoe[i]
         end
     end
-    @constraint(model, cons.==bc)
-    info = struct_data(cliques,cql,cliquesize,basis,blocks,cl,blocksize,tsupp,I,J,pos)
+    if constrs !== nothing
+        @constraint(model, [i=1:ltsupp], cons[i]==bc[i], base_name=constrs)
+    else
+        @constraint(model, cons.==bc)
+    end
+    info = struct_data(cliques,cql,cliquesize,basis,blocks,cl,blocksize,tsupp,I,J,pos,constrs)
     return model,info
 end
 
-function clique_decomp(n, m, l, fsupp, gsupp, hsupp)
+function clique_decomp(n, m, l, fsupp::Matrix{UInt8}, gsupp::Vector{Matrix{UInt8}}, hsupp::Vector{Matrix{UInt8}}; QUIET=false)
     G = SimpleGraph(n)
-    for j = 1:size(fsupp, 2)
-        add_clique!(G, findall(fsupp[:,j] .!= 0))
+    for item in eachcol(fsupp)
+        add_clique!(G, findall(item .!= 0))
     end
     for i = 1:m
         temp = findall(gsupp[i][:,1] .!= 0)
@@ -272,13 +277,15 @@ function clique_decomp(n, m, l, fsupp, gsupp, hsupp)
     cliques,cql,cliquesize = chordal_cliques!(G)
     uc = unique(cliquesize)
     sizes=[sum(cliquesize.== i) for i in uc]
-    println("-----------------------------------------------------------------------------")
-    println("The clique sizes of varibles:\n$uc\n$sizes")
-    println("-----------------------------------------------------------------------------")
+    if QUIET == false
+        println("-----------------------------------------------------------------------------")
+        println("The clique sizes of varibles:\n$uc\n$sizes")
+        println("-----------------------------------------------------------------------------")
+    end
     return cliques,cql,cliquesize
 end
 
-function assign_constraint(m, l, gsupp, hsupp, cliques, cql)
+function assign_constraint(m, l, gsupp::Vector{Matrix{UInt8}}, hsupp::Vector{Matrix{UInt8}}, cliques, cql)
     I = [UInt32[] for i=1:cql]
     J = [UInt32[] for i=1:cql]
     for i = 1:m
@@ -302,7 +309,7 @@ function assign_constraint(m, l, gsupp, hsupp, cliques, cql)
     return I,J
 end
 
-function get_cblocks_mix(n, I, J, m, l, fsupp, gsupp, glt, hsupp, hlt, basis, cliques, cql; tsupp=[], TS="block", SO=1, QUIET=false)
+function get_cblocks_mix(n, I, J, m, l, fsupp::Matrix{UInt8}, gsupp::Vector{Matrix{UInt8}}, glt, hsupp::Vector{Matrix{UInt8}}, hlt, basis, cliques, cql; tsupp=[], TS="block", SO=1, QUIET=false)
     blocks = Vector{Vector{Vector{Vector{UInt16}}}}(undef, cql)
     cl = Vector{Vector{Int}}(undef, cql)
     blocksize = Vector{Vector{Vector{Int}}}(undef, cql)
@@ -322,7 +329,7 @@ function get_cblocks_mix(n, I, J, m, l, fsupp, gsupp, glt, hsupp, hlt, basis, cl
     status = ones(Int, cql)
     for i = 1:cql
         lc = length(I[i]) + length(J[i])
-        ind = [issubset(findall(tsupp[:,j] .!= 0), cliques[i]) for j = 1:size(tsupp, 2)]
+        ind = [issubset(findall(item .!= 0), cliques[i]) for item in eachcol(tsupp)]
         supp = [tsupp[:, ind] UInt8(2)*basis[i][1]]
         supp = sortslices(supp, dims=2)
         supp = unique(supp, dims=2)
@@ -361,4 +368,22 @@ function add_poly!(model, vars, degree)
     coe = @variable(model, [1:length(mon)])
     p = coe'*mon
     return p,coe,mon
+end
+
+function get_moment_matrix(moment, tsupp, cql, basis)
+    MomMat = Vector{Union{Float64, Symmetric{Float64}, Array{Float64,2}}}(undef, cql)
+    ltsupp = size(tsupp, 2)
+    for i = 1:cql
+        lb = size(basis[i][1], 2)
+        MomMat[i] = zeros(Float64, lb, lb)
+        for j = 1:lb, k = j:lb
+            bi = basis[i][1][:, j] + basis[i][1][:, k]
+            Locb = bfind(tsupp, ltsupp, bi)
+            if Locb != 0
+                MomMat[i][j,k] = moment[Locb]
+            end
+        end
+        MomMat[i] = Symmetric(MomMat[i], :U)
+    end
+    return MomMat
 end
